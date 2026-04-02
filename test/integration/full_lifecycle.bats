@@ -64,7 +64,7 @@ _create_transcript() {
   assert_success
 
   # progress.md should now have Pre-compaction State section
-  grep -q '## Pre-compaction State' "$TEST_MEMORY_DIR/progress.md"
+  grep -q '## Pre-compaction State' "$TEST_PROGRESS_DIR/progress.md"
 
   # 5. Session start again (resume) should recover state and strip the section
   run_script_with_input "session-start.sh" '{"cwd":"'"$TEST_CWD"'","source":"resume"}'
@@ -73,10 +73,10 @@ _create_transcript() {
   assert_output --partial "JWT token generation"
 
   # State section should be stripped from progress.md
-  ! grep -q '## Pre-compaction State' "$TEST_MEMORY_DIR/progress.md"
+  ! grep -q '## Pre-compaction State' "$TEST_PROGRESS_DIR/progress.md"
 }
 
-@test "lifecycle: start -> session-end worker -> next start shows recap" {
+@test "lifecycle: start -> session-end writes recap -> next start shows recap" {
   _provision
 
   # 1. Session start
@@ -88,28 +88,18 @@ _create_transcript() {
 - Added JWT token generation
 - Wrote integration tests for login flow"
 
-  # 3. Mock LLM: recall returns good compaction, grow returns NONE
-  _install_mock_claude_dispatch \
-    "memory compaction" "recall-compact-good.txt" \
-    "learning extraction" "grow-extract-none.txt"
-
-  # 4. Run session-end worker directly (not the hook mode, the worker mode)
-  #    The worker reads CWD from arg, not stdin
-  export TANDEM_AUTO_COMMIT=0  # Skip checkpoint (no git repo)
-  run bash -c "CLAUDE_PLUGIN_ROOT='$PLUGIN_ROOT' HOME='$HOME' PATH='$PATH' TANDEM_AUTO_COMMIT=0 '$PLUGIN_ROOT/scripts/session-end.sh' --worker '$TEST_CWD'"
+  # 3. Run simplified session-end (no worker, just summary + bookkeeping)
+  run_script_with_input "session-end.sh" "$(fixture_sessionend "$TEST_CWD")"
   assert_success
+  assert_output --partial "Session ended"
 
   # Recap file should be created
   [ -f "$HOME/.tandem/.last-session-recap" ]
-  grep -q 'recall_status: 1' "$HOME/.tandem/.last-session-recap"
+  grep -q 'recall_status: inline' "$HOME/.tandem/.last-session-recap"
 
-  # MEMORY.md should have been compacted
-  [ -f "$TEST_MEMORY_DIR/MEMORY.md" ]
-
-  # 5. Next session start should show recap
+  # 4. Next session start should show recap
   run_script_with_input "session-start.sh" '{"cwd":"'"$TEST_CWD"'","source":"startup"}'
   assert_success
-  assert_output --partial "memory compacted"
 
   # Recap file should be consumed (deleted)
   [ ! -f "$HOME/.tandem/.last-session-recap" ]
@@ -120,7 +110,7 @@ _create_transcript() {
 
   # Create progress.md with a Pre-compaction State section already present
   # (simulates what pre-compact.sh would have written)
-  cat > "$TEST_MEMORY_DIR/progress.md" <<'PROGRESS'
+  cat > "$TEST_PROGRESS_DIR/progress.md" <<'PROGRESS'
 - Earlier work notes
 
 ## Pre-compaction State
@@ -137,10 +127,10 @@ PROGRESS
   assert_output --partial "seed data"
 
   # The Pre-compaction State section should be stripped
-  ! grep -q '## Pre-compaction State' "$TEST_MEMORY_DIR/progress.md"
+  ! grep -q '## Pre-compaction State' "$TEST_PROGRESS_DIR/progress.md"
 
   # Earlier notes should still be present
-  grep -q 'Earlier work notes' "$TEST_MEMORY_DIR/progress.md"
+  grep -q 'Earlier work notes' "$TEST_PROGRESS_DIR/progress.md"
 }
 
 @test "lifecycle: MEMORY.md corruption detected and rolled back from backup" {

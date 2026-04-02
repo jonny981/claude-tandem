@@ -143,7 +143,7 @@ build_heredoc_cmd() {
 # ─── 9. Deny for missing body includes progress.md context ───────────────
 
 @test "deny for missing body includes progress.md context when available" {
-  printf '%s\n%s\n' "- Built auth module" "- Integrated OAuth2" > "$TEST_MEMORY_DIR/progress.md"
+  printf '%s\n%s\n' "- Built auth module" "- Integrated OAuth2" > "$TEST_PROGRESS_DIR/progress.md"
   local json
   json=$(build_json 'git commit -m "feat: add auth"')
   run_validate "$json"

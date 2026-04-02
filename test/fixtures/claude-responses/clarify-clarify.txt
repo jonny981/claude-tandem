@@ -1,5 +1,0 @@
-CLARIFY
-The user wants to implement user authentication for their application, including login, registration, and session management.
-Q: Should we use session-based auth or JWT tokens?
-Q: Do you need OAuth2 integration with specific providers (Google, GitHub)?
-Q: Should the auth system support multi-factor authentication?

@@ -1,6 +1,6 @@
 # Tandem Configuration
 
-Tandem uses environment variables to control behavior across its three features (Clarify, Recall, Grow). All configuration is optional — defaults are chosen for minimal friction.
+Tandem uses environment variables to control behavior across its features (Recall, Commit). All configuration is optional — defaults are chosen for minimal friction.
 
 ## Environment Variables
 
@@ -9,10 +9,7 @@ Tandem uses environment variables to control behavior across its three features 
 | `TANDEM_LLM_BACKEND` | `claude` | LLM endpoint: `claude` or OpenAI-compatible URL | `http://localhost:11434` (Ollama) |
 | `TANDEM_LLM_MODEL` | `haiku` | Model name. Required for URL backends. | `llama3.2`, `mistral` |
 | `TANDEM_LLM_API_KEY` | (none) | Bearer token for remote endpoints | `sk-...` |
-| `TANDEM_CLARIFY_MIN_LENGTH` | `200` | Minimum prompt character count before Clarify assessment | `500` (skip short prompts) |
-| `TANDEM_CLARIFY_QUIET` | `0` | Suppress "Clarified." status indicator | `1` (silent mode) |
 | `TANDEM_LOG_LEVEL` | `info` | Log verbosity: `error`, `warn`, `info`, `debug` | `debug` (verbose for troubleshooting) |
-| `TANDEM_PROFILE_DIR` | `~/.tandem/profile` | Location for learning profile files (Grow) | `~/Dropbox/tandem` (sync across machines) |
 | `TANDEM_QUIET` | `0` | Suppress all Tandem status output | `1` (dogfooding mode) |
 | `TANDEM_AUTO_COMMIT` | `1` | Enable/disable session-end auto-commits | `0` (disable) |
 
@@ -32,41 +29,9 @@ Edit `~/.tandem/.env` and uncomment the variables you want to change.
 
 Add to `~/.zshrc` or `~/.bashrc`:
 
-```bash
-export TANDEM_CLARIFY_MIN_LENGTH=300
-export TANDEM_PROFILE_DIR="$HOME/Dropbox/tandem"
-```
-
-**Per-session (temporary):**
-
-```bash
-TANDEM_CLARIFY_QUIET=1 claude
-```
-
-**Testing specific variables:**
-
-```bash
-TANDEM_CLARIFY_MIN_LENGTH=100 echo '{"prompt":"test prompt here"}' | ./plugins/tandem/scripts/detect-raw-input.sh
-```
-
 ## Hook Input Reference
 
 Tandem hooks receive JSON input via stdin. Each hook reads specific fields:
-
-### UserPromptSubmit Hook (`detect-raw-input.sh`)
-
-**Reads:**
-- `prompt` (string) — User's raw input text
-
-**Example:**
-```json
-{"prompt": "add auth to the api"}
-```
-
-**Behavior:**
-- If `prompt.length < TANDEM_CLARIFY_MIN_LENGTH`, exits early (no LLM call)
-- Otherwise, calls Haiku to assess quality and restructure if needed
-- Logs all decisions to `~/.tandem/logs/clarify.jsonl`
 
 ### SessionStart Hook (`session-start.sh`)
 
@@ -83,7 +48,7 @@ Tandem hooks receive JSON input via stdin. Each hook reads specific fields:
 - Cleans up orphaned sessions (dead PIDs) from the session registry
 - Registers the current session at `~/.tandem/sessions/<session-id>/state.json`
 - Detects sibling sessions (other active sessions on the same project) and reports them
-- First run: provisions rules files to `~/.claude/rules/` and profile directory
+- First run: provisions rules files to `~/.claude/rules/`
 - Every run: checks for stale progress.md, version upgrades, CLAUDE.md section injection
 - Post-compaction: displays "Resuming" state snapshot
 - Computes auto-memory directory: `~/.claude/projects/$(echo "$cwd" | sed 's|/|-|g')/memory/`
@@ -102,8 +67,7 @@ Tandem hooks receive JSON input via stdin. Each hook reads specific fields:
 **Behavior:**
 - Phase 0: Checkpoint commit with descriptive subject (`claude(checkpoint): <current task>`)
 - Phase 1: Calls Haiku to compact MEMORY.md (budget: $0.05)
-- Phase 2: Calls Haiku to extract learnings to profile (budget: $0.05)
-- Phase 3: Updates global activity log (`~/.tandem/memory/global.md`)
+- Phase 2: Updates global activity log (`~/.tandem/memory/global.md`)
 - Deregisters the session from `~/.tandem/sessions/`
 - progress.md is preserved (Working State carries forward to the next session)
 - Only fires if `progress.md` exists (trivial sessions skip LLM calls)
@@ -170,19 +134,15 @@ Tandem never writes to user repositories. All data goes to Claude Code's native 
 | Path | Purpose |
 |------|---------|
 | `~/.claude/rules/tandem-recall.md` | Provisioned rule file (session progress guidelines) |
-| `~/.claude/rules/tandem-grow.md` | Provisioned rule file (learning mention guidelines) |
 | `~/.claude/CLAUDE.md` | Tandem injects a `<!-- tandem:start -->` section here |
 | `~/.claude/projects/<cwd-sanitized>/memory/progress.md` | Session progress log (auto-memory) |
 | `~/.claude/projects/<cwd-sanitized>/memory/MEMORY.md` | Compacted memory (native Claude Code convention) |
-| `~/.tandem/profile/*.md` | User's learning profile (Grow) |
 | `~/.tandem/memory/global.md` | Cross-project activity log (30 entries max) |
 | `~/.tandem/state/recurrence.json` | Recurring theme tracker |
 | `~/.tandem/logs/tandem.log` | Unified activity/error log (all hooks) |
-| `~/.tandem/logs/clarify.jsonl` | Clarify decision log (for review) |
 | `~/.tandem/.env` | Environment variable overrides (loaded by every hook) |
 | `~/.tandem/sessions/<session-id>/state.json` | Session registry (pid, project, branch, heartbeat, task) |
 | `~/.tandem/.provisioned` | First-run marker file |
-| `~/.tandem/next-nudge` | Ephemeral learning nudge for next session |
 
 **Auto-memory directory naming:**
 
@@ -200,32 +160,14 @@ Tandem uses conservative LLM budget caps to prevent runaway costs:
 
 | Hook | Model | Budget | Purpose |
 |------|-------|--------|---------|
-| UserPromptSubmit | Haiku | $0.10 | Prompt assessment + restructuring |
 | SessionEnd (Recall) | Haiku | $0.05 | MEMORY.md compaction |
-| SessionEnd (Grow) | Haiku | $0.05 | Learning extraction |
 | PreCompact | Haiku | $0.03 | State snapshot |
 
-Total worst-case per session: **$0.23** (if all hooks fire with substantive content)
+Total worst-case per session: **$0.08** (if all hooks fire with substantive content)
 
-Typical session cost: **$0.03-$0.08** (PreCompact + SessionEnd, UserPromptSubmit skipped for short prompts)
+Typical session cost: **$0.03-$0.08** (PreCompact + SessionEnd)
 
 ## Logs and Debugging
-
-**Clarify decision log:**
-
-Every UserPromptSubmit hook writes a JSON line to `~/.tandem/logs/clarify.jsonl`:
-
-```json
-{
-  "ts": "2026-02-11T14:23:45Z",
-  "action": "restructured",
-  "prompt_length": 287,
-  "prompt": "add auth to the api",
-  "result": "Add authentication to the API.\n\nImplement authentication middleware for the API endpoints..."
-}
-```
-
-Actions: `skip` (prompt already clear), `restructured` (Haiku rewrote it), or `clarify` (uncertainty detected, questions generated)
 
 **Unified log:**
 
@@ -275,40 +217,15 @@ TANDEM_LLM_API_KEY=your-api-key
 
 `TANDEM_LLM_MODEL` is required when using a URL backend. The model name must match what the endpoint expects.
 
-All Tandem LLM calls are low-reasoning admin tasks (memory compaction, learning extraction, prompt assessment). They do not need frontier models. A 7B-8B parameter local model works well.
-
-### Custom Profile Location (Sync Across Machines)
-
-```bash
-export TANDEM_PROFILE_DIR="$HOME/Dropbox/Apps/Tandem"
-```
-
-Grow will write learning files to this directory. Useful for syncing your technical profile across multiple machines.
+All Tandem LLM calls are low-reasoning admin tasks (memory compaction). They do not need frontier models. A 7B-8B parameter local model works well.
 
 ### Quiet Mode (Dogfooding)
 
 ```bash
 export TANDEM_QUIET=1
-export TANDEM_CLARIFY_QUIET=1
 ```
 
-Suppresses all status indicators (`Recalled.`, `Grown.`, `Clarified.`). Used for dogfooding to avoid self-reference loops.
-
-### Aggressive Clarify Threshold
-
-```bash
-export TANDEM_CLARIFY_MIN_LENGTH=100
-```
-
-Triggers Clarify on shorter prompts (useful if you frequently type stream-of-consciousness requests).
-
-### Disable Clarify Entirely
-
-Clarify fires on UserPromptSubmit. To disable:
-
-1. Edit `~/.claude-plugin/hooks/hooks.json` (if you have overrides)
-2. Remove the UserPromptSubmit hook entry
-3. Or set a very high threshold: `export TANDEM_CLARIFY_MIN_LENGTH=10000`
+Suppresses all status indicators (`Recalled.`). Used for dogfooding to avoid self-reference loops.
 
 ## Local Development (Plugin Cache Sync)
 
@@ -347,9 +264,8 @@ This runs on every session startup and symlinks all local directory-based market
 
 | Script | Purpose | Link |
 |--------|---------|------|
-| `detect-raw-input.sh` | Clarify: assess and restructure user prompts | [plugins/tandem/scripts/detect-raw-input.sh](/plugins/tandem/scripts/detect-raw-input.sh) |
 | `session-start.sh` | Session registration, orphan cleanup, sibling detection, provisioning, state recovery | [plugins/tandem/scripts/session-start.sh](/plugins/tandem/scripts/session-start.sh) |
-| `session-end.sh` | Checkpoint commit + Recall (compaction) + Grow (extraction) + session deregistration | [plugins/tandem/scripts/session-end.sh](/plugins/tandem/scripts/session-end.sh) |
+| `session-end.sh` | Recall (compaction) + session deregistration | [plugins/tandem/scripts/session-end.sh](/plugins/tandem/scripts/session-end.sh) |
 | `pre-compact.sh` | State snapshot before compaction | [plugins/tandem/scripts/pre-compact.sh](/plugins/tandem/scripts/pre-compact.sh) |
 | `task-completed.sh` | Async progress.md staleness check | [plugins/tandem/scripts/task-completed.sh](/plugins/tandem/scripts/task-completed.sh) |
 | `sync-local-plugins.sh` | Generic plugin cache symlink sync | [plugins/tandem/scripts/sync-local-plugins.sh](/plugins/tandem/scripts/sync-local-plugins.sh) |

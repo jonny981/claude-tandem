@@ -4,7 +4,7 @@ Common issues and solutions for the Tandem Claude Code plugin.
 
 ## Hook Not Firing
 
-**Symptom:** Tandem features (Clarify, Recall, Grow) don't seem to work. No status messages, no MEMORY.md updates.
+**Symptom:** Tandem features don't seem to work. No status messages, no MEMORY.md updates.
 
 **Diagnosis:**
 
@@ -192,7 +192,6 @@ All Tandem hook scripts **exit 0** by design — hooks must never crash Claude C
    Look for `[Tandem]` messages in your shell scrollback:
    ```
    [Tandem Recall] Warning: failed to write temp file (disk full?)
-   [Tandem Grow] Error: claude CLI not found
    ```
 
 2. **Check disk space:**
@@ -227,17 +226,11 @@ All Tandem hook scripts **exit 0** by design — hooks must never crash Claude C
 **Symptom:** Message in progress.md:
 ```
 ## Session End Partial Failure (2026-02-11)
-Recall completed: 1, Grow completed: 0
+Recall completed: 0
 ```
 
 **Meaning:**
-One of the critical phases (Recall or Grow) failed during SessionEnd. Progress.md was preserved for recovery.
-
-**Diagnosis:**
-
-Check stderr for specific phase that failed:
-- `Recall completed: 0` → Recall (compaction) failed
-- `Grow completed: 0` → Grow (learning extraction) failed
+Recall (compaction) failed during SessionEnd. Progress.md was preserved for recovery.
 
 **Solutions:**
 

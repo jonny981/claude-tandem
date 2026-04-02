@@ -20,9 +20,8 @@ TRANSCRIPT_PATH=$(echo "$INPUT" | jq -r '.transcript_path // empty')
 [ -z "$TRANSCRIPT_PATH" ] && exit 0
 [ ! -f "$TRANSCRIPT_PATH" ] && exit 0
 
-# Compute auto-memory directory
-SANITISED=$(echo "$CWD" | sed 's|/|-|g')
-MEMORY_DIR="$HOME/.claude/projects/${SANITISED}/memory"
+# Compute progress directory
+PROGRESS_DIR=$(tandem_progress_dir "$CWD")
 
 # Read tail of transcript (last ~20KB)
 TRANSCRIPT_TAIL=$(tail -c 20000 "$TRANSCRIPT_PATH" 2>/dev/null)
@@ -30,10 +29,10 @@ TRANSCRIPT_TAIL=$(tail -c 20000 "$TRANSCRIPT_PATH" 2>/dev/null)
 
 # Determine if progress.md is stale (> 2 minutes old or missing)
 INCLUDE_PROGRESS=false
-if [ ! -f "$MEMORY_DIR/progress.md" ]; then
+if [ ! -f "$PROGRESS_DIR/progress.md" ]; then
   INCLUDE_PROGRESS=true
 else
-  PROGRESS_MTIME=$(tandem_file_mtime "$MEMORY_DIR/progress.md")
+  PROGRESS_MTIME=$(tandem_file_mtime "$PROGRESS_DIR/progress.md")
   NOW=$(date +%s)
   if [ -n "$PROGRESS_MTIME" ]; then
     AGE=$((NOW - PROGRESS_MTIME))
@@ -43,29 +42,29 @@ fi
 
 # Check for structured Working State markers (deterministic state capture)
 WORKING_STATE=""
-if [ -f "$MEMORY_DIR/progress.md" ]; then
+if [ -f "$PROGRESS_DIR/progress.md" ]; then
   WORKING_STATE=$(sed -n '/<!-- working-state:start -->/,/<!-- working-state:end -->/p' \
-    "$MEMORY_DIR/progress.md" 2>/dev/null | grep -v '<!-- working-state')
+    "$PROGRESS_DIR/progress.md" 2>/dev/null | grep -v '<!-- working-state')
 fi
 
 # If structured state exists and progress is fresh, skip LLM entirely
 if [ -n "$WORKING_STATE" ] && [ "$INCLUDE_PROGRESS" = false ]; then
   # Structured state found + progress is fresh — write state directly, no LLM needed
-  mkdir -p "$MEMORY_DIR"
+  mkdir -p "$PROGRESS_DIR"
   TMPFILE=$(mktemp)
   if [ -z "$TMPFILE" ] || [ ! -f "$TMPFILE" ]; then
     tandem_log error "failed to create temp file for progress.md"
     exit 0
   fi
 
-  if [ -f "$MEMORY_DIR/progress.md" ]; then
-    cat "$MEMORY_DIR/progress.md" > "$TMPFILE"
+  if [ -f "$PROGRESS_DIR/progress.md" ]; then
+    cat "$PROGRESS_DIR/progress.md" > "$TMPFILE"
   fi
 
   printf '\n## Pre-compaction State\n' >> "$TMPFILE"
   echo "$WORKING_STATE" >> "$TMPFILE"
 
-  mv "$TMPFILE" "$MEMORY_DIR/progress.md"
+  mv "$TMPFILE" "$PROGRESS_DIR/progress.md"
   tandem_log info "captured structured working state before compaction (no LLM)"
   exit 0
 fi
@@ -111,7 +110,7 @@ if echo "$RESULT" | grep -qx 'SKIP'; then
 fi
 
 # Parse and append to progress.md
-mkdir -p "$MEMORY_DIR"
+mkdir -p "$PROGRESS_DIR"
 
 # Extract STATE section
 STATE_CONTENT=$(echo "$RESULT" | sed -n '/^STATE:/,/^PROGRESS:/{ /^PROGRESS:/d; p; }')
@@ -133,8 +132,8 @@ if [ -z "$TMPFILE" ] || [ ! -f "$TMPFILE" ]; then
   exit 0
 fi
 
-if [ -f "$MEMORY_DIR/progress.md" ]; then
-  cat "$MEMORY_DIR/progress.md" > "$TMPFILE"
+if [ -f "$PROGRESS_DIR/progress.md" ]; then
+  cat "$PROGRESS_DIR/progress.md" > "$TMPFILE"
 fi
 
 # Append progress section if present
@@ -155,7 +154,7 @@ if [ $? -ne 0 ]; then
   exit 0
 fi
 
-mv "$TMPFILE" "$MEMORY_DIR/progress.md"
+mv "$TMPFILE" "$PROGRESS_DIR/progress.md"
 tandem_log info "captured state before compaction"
 
 exit 0

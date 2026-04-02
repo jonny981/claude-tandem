@@ -1,6 +1,0 @@
-FILE: testing-patterns.md
-## Bats Testing
-- Use `run` for capturing exit codes and output
-- `assert_success` / `assert_failure` for exit code checks
-- HOME isolation prevents test pollution
----

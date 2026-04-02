@@ -1,5 +1,5 @@
 ---
-description: "Use when the user wants to check which Tandem features are installed, verify hooks are configured correctly, or see profile and memory stats."
+description: "Use when the user wants to check which Tandem features are installed, verify hooks are configured correctly, or see memory stats."
 ---
 
 # Tandem Status

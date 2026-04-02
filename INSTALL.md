@@ -55,12 +55,8 @@ On your first session after installation, Tandem's SessionStart hook will automa
 
 1. **Rules files** → `~/.claude/rules/`
    - `tandem-recall.md` — memory management instructions
-   - `tandem-grow.md` — learning feedback instructions
 
-2. **Profile directory** → `~/.tandem/profile/`
-   - `career-context.md` — optional template for personalized learning
-
-3. **CLAUDE.md section** → `~/.claude/CLAUDE.md`
+2. **CLAUDE.md section** → `~/.claude/CLAUDE.md`
    - Adds progress.md instructions (between `<!-- tandem:start -->` and `<!-- tandem:end -->` markers)
    - If CLAUDE.md doesn't exist, creates it with just the Tandem section
    - If CLAUDE.md exists, appends the section to the end
@@ -70,7 +66,7 @@ On your first session after installation, Tandem's SessionStart hook will automa
 
 You should see this message on first run:
 ```
-[Tandem] First run — provisioned rules files and profile directory. Run /tandem:status to verify.
+[Tandem] First run — provisioned rules files. Run /tandem:status to verify.
 ```
 
 ## Verification
@@ -86,8 +82,7 @@ Run the status skill:
 
 Expected output includes:
 - Plugin version (e.g., `Tandem v1.1.0`)
-- Rules files status (`✓ tandem-recall.md`, `✓ tandem-grow.md`)
-- Profile directory status (`✓ career-context.md`)
+- Rules files status (`✓ tandem-recall.md`)
 - Hook registration status
 
 ### 2. Verify Rules Files
@@ -99,17 +94,6 @@ ls -la ~/.claude/rules/tandem-*.md
 
 You should see:
 - `~/.claude/rules/tandem-recall.md`
-- `~/.claude/rules/tandem-grow.md`
-
-### 3. Verify Profile Directory
-
-Check the profile directory:
-```bash
-ls -la ~/.tandem/profile/
-```
-
-You should see:
-- `career-context.md` (template for personalized learning)
 
 ### 4. Verify CLAUDE.md Section
 
@@ -166,20 +150,13 @@ After installation and first run, you'll have:
 │       │   ├── session-end.sh
 │       │   ├── pre-compact.sh
 │       │   ├── task-completed.sh
-│       │   └── detect-raw-input.sh
 │       ├── skills/
-│       │   ├── clarify/
-│       │   ├── grow/
 │       │   ├── sessions/           # Session registry inspection
 │       │   └── status/
 │       ├── rules/
-│       │   ├── tandem-recall.md
-│       │   └── tandem-grow.md
-│       └── templates/
-│           └── career-context.md
+│       │   └── tandem-recall.md
 ├── rules/
-│   ├── tandem-recall.md         # Provisioned from plugin
-│   └── tandem-grow.md           # Provisioned from plugin
+│   └── tandem-recall.md         # Provisioned from plugin
 └── projects/
     └── <your-project>/
         └── memory/
@@ -190,8 +167,6 @@ After installation and first run, you'll have:
 ├── sessions/                    # Session registry (ephemeral, auto-cleaned)
 │   └── <session-id>/
 │       └── state.json           # pid, project, branch, heartbeat, task
-├── profile/
-│   └── career-context.md        # Provisioned from template
 ├── memory/
 │   └── global.md                # Cross-project activity log (created on SessionEnd)
 └── state/
@@ -227,7 +202,7 @@ This removes the plugin directory but **does not** delete provisioned files. To 
 # Remove rules files
 rm ~/.claude/rules/tandem-*.md
 
-# Remove profile directory
+# Remove Tandem data
 rm -rf ~/.tandem/
 
 # Remove Tandem section from CLAUDE.md (manual edit required)
@@ -290,13 +265,6 @@ CLAUDE_PLUGIN_ROOT=~/.claude/plugins/tandem \
 Once installed, Tandem works automatically in the background:
 
 1. **Recall** — tracks progress across sessions via `progress.md`, registers sessions for concurrent awareness
-2. **Grow** — extracts learning opportunities and updates your technical profile
-3. **Clarify** — prompts for clearer input when requests are ambiguous
-
-To customize learning suggestions, edit your profile:
-```bash
-code ~/.tandem/profile/career-context.md
-```
 
 For usage examples and feature details, see [README.md](./README.md).
 

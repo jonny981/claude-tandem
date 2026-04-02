@@ -25,7 +25,6 @@ setup() {
   # Standard dirs
   mkdir -p "$HOME/.tandem/logs"
   mkdir -p "$HOME/.tandem/state"
-  mkdir -p "$HOME/.tandem/profile"
   mkdir -p "$HOME/.claude/rules"
 
   # Fake project CWD
@@ -38,20 +37,21 @@ setup() {
   export TEST_MEMORY_DIR="$HOME/.claude/projects/${sanitised}/memory"
   mkdir -p "$TEST_MEMORY_DIR"
 
+  # Progress dir: non-git fallback (matches tandem_progress_dir for non-git CWD)
+  local progress_slug
+  progress_slug=$(echo "$TEST_CWD" | sed 's|/|-|g')
+  export TEST_PROGRESS_DIR="$HOME/.tandem/progress/${progress_slug}"
+  mkdir -p "$TEST_PROGRESS_DIR"
+
   # Install no-op mock claude on PATH
   _install_mock_claude "mock response"
 
   # Clean environment
   unset TANDEM_WORKER
-  unset TANDEM_AUTO_SQUASH
-  unset TANDEM_AUTO_COMMIT
   unset TANDEM_LLM_BACKEND
   unset TANDEM_LLM_MODEL
   unset TANDEM_LLM_API_KEY
-  unset TANDEM_CLARIFY_MIN_LENGTH
-  unset TANDEM_CLARIFY_QUIET
   unset TANDEM_LOG_LEVEL
-  unset TANDEM_PROFILE_DIR
 }
 
 teardown() {
@@ -74,12 +74,12 @@ create_progress() {
   local content="$1"
   local age_seconds="${2:-0}"
 
-  echo "$content" > "$TEST_MEMORY_DIR/progress.md"
+  echo "$content" > "$TEST_PROGRESS_DIR/progress.md"
 
   if [ "$age_seconds" -gt 0 ]; then
     local past_time
     past_time=$(($(date +%s) - age_seconds))
-    touch -t "$(date -r "$past_time" '+%Y%m%d%H%M.%S' 2>/dev/null || date -d "@$past_time" '+%Y%m%d%H%M.%S' 2>/dev/null)" "$TEST_MEMORY_DIR/progress.md" 2>/dev/null || true
+    touch -t "$(date -r "$past_time" '+%Y%m%d%H%M.%S' 2>/dev/null || date -d "@$past_time" '+%Y%m%d%H%M.%S' 2>/dev/null)" "$TEST_PROGRESS_DIR/progress.md" 2>/dev/null || true
   fi
 }
 
@@ -93,18 +93,13 @@ create_memory() {
 create_stats() {
   local sessions="${1:-0}"
   local compactions="${2:-0}"
-  local updates="${3:-0}"
-  local clarifications="${4:-0}"
   cat > "$HOME/.tandem/state/stats.json" <<STATS_EOF
 {
   "total_sessions": $sessions,
   "first_session": "2025-01-01",
   "last_session": "2025-01-01",
-  "clarifications": $clarifications,
   "compactions": $compactions,
-  "profile_updates": $updates,
-  "milestones_hit": [],
-  "profile_total_lines": 0
+  "milestones_hit": []
 }
 STATS_EOF
 }
@@ -117,6 +112,9 @@ init_test_git_repo() {
   echo "init" > "$TEST_CWD/README.md"
   git -C "$TEST_CWD" add README.md
   git -C "$TEST_CWD" commit -q -m "$(printf 'chore: initial commit\n\nBootstrap test repo.')"
+  # Update progress dir to git-root location (matches tandem_progress_dir for git repos)
+  export TEST_PROGRESS_DIR="$TEST_CWD/.claude"
+  mkdir -p "$TEST_PROGRESS_DIR"
 }
 
 # Create a git commit in TEST_CWD with given subject and optional body

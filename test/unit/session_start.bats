@@ -38,18 +38,8 @@ run_session_start() {
   run_session_start
   assert_success
   [ -f "$HOME/.claude/rules/tandem-recall.md" ]
-  [ -f "$HOME/.claude/rules/tandem-grow.md" ]
   [ -f "$HOME/.claude/rules/tandem-display.md" ]
   [ -f "$HOME/.claude/rules/tandem-commits.md" ]
-}
-
-@test "first run: creates profile directory with USER.md template" {
-  rm -f "$HOME/.tandem/.provisioned"
-  rm -rf "$HOME/.tandem/profile"
-  run_session_start
-  assert_success
-  [ -d "$HOME/.tandem/profile" ]
-  [ -f "$HOME/.tandem/profile/USER.md" ]
 }
 
 @test "first run: creates .provisioned marker" {
@@ -86,7 +76,7 @@ run_session_start() {
 }
 
 @test "existing stats.json: not overwritten" {
-  create_stats 42 5 3
+  create_stats 42 5
   run_session_start
   assert_success
   local total
@@ -216,21 +206,21 @@ EOF
   create_progress "$(printf '## Earlier Work\n- Did stuff\n\n## Pre-compaction State\nWorking on auth module')"
   run_session_start
   assert_success
-  ! grep -q 'Pre-compaction State' "$TEST_MEMORY_DIR/progress.md"
+  ! grep -q 'Pre-compaction State' "$TEST_PROGRESS_DIR/progress.md"
 }
 
 @test "earlier progress.md content preserved after stripping state section" {
   create_progress "$(printf '## Earlier Work\n- Did stuff\n\n## Pre-compaction State\nWorking on auth module')"
   run_session_start
   assert_success
-  grep -q 'Earlier Work' "$TEST_MEMORY_DIR/progress.md"
-  grep -q 'Did stuff' "$TEST_MEMORY_DIR/progress.md"
+  grep -q 'Earlier Work' "$TEST_PROGRESS_DIR/progress.md"
+  grep -q 'Did stuff' "$TEST_PROGRESS_DIR/progress.md"
 }
 
 # ─── 17. Session count ──────────────────────────────────────────────────────
 
 @test "total_sessions incremented on startup source" {
-  create_stats 5 0 0
+  create_stats 5 0
   run_session_start "startup"
   assert_success
   local total
@@ -239,7 +229,7 @@ EOF
 }
 
 @test "total_sessions NOT incremented on resume source" {
-  create_stats 5 0 0
+  create_stats 5 0
   run_session_start "resume"
   assert_success
   local total
@@ -248,7 +238,7 @@ EOF
 }
 
 @test "total_sessions NOT incremented on compact source" {
-  create_stats 5 0 0
+  create_stats 5 0
   run_session_start "compact"
   assert_success
   local total
@@ -303,7 +293,7 @@ Data line 6" > "$TEST_MEMORY_DIR/.MEMORY.md.backup-5678"
 # ─── 21–22. Milestones ──────────────────────────────────────────────────────
 
 @test "session count hits 10: outputs milestone message" {
-  create_stats 9 2 1
+  create_stats 9 2
   run_session_start "startup"
   assert_success
   assert_output --partial "Milestone: 10 sessions!"
@@ -317,9 +307,7 @@ Data line 6" > "$TEST_MEMORY_DIR/.MEMORY.md.backup-5678"
   "first_session": "2025-01-01",
   "last_session": "2025-01-01",
   "compactions": 2,
-  "profile_updates": 1,
-  "milestones_hit": ["10"],
-  "profile_total_lines": 50
+  "milestones_hit": ["10"]
 }
 STATS_EOF
 
@@ -330,23 +318,21 @@ STATS_EOF
 
 # ─── 23–24. Recap ───────────────────────────────────────────────────────────
 
-@test "recap file with recall_status=1: shows memory compacted message" {
+@test "recap file with memory_lines: shows memory line count" {
   cat > "$HOME/.tandem/.last-session-recap" <<'EOF'
-recall_status: 1
+recall_status: inline
 memory_lines: 42
-grow_status: 0
 EOF
 
   run_session_start
   assert_success
-  assert_output --partial "memory compacted (42 lines)"
+  assert_output --partial "memory at 42 lines"
 }
 
 @test "recap file cleaned up after display" {
   cat > "$HOME/.tandem/.last-session-recap" <<'EOF'
-recall_status: 1
+recall_status: inline
 memory_lines: 42
-grow_status: 0
 EOF
 
   run_session_start
@@ -376,24 +362,13 @@ EOF
 
 @test ".tandem-last-compaction marker: shows Recalled. and cleaned up" {
   touch "$TEST_MEMORY_DIR/.tandem-last-compaction"
-  create_stats 5 3 1
+  create_stats 5 3
 
   run_session_start
   assert_success
   assert_output --partial "Recalled."
   assert_output --partial "3 compactions total"
   [ ! -f "$TEST_MEMORY_DIR/.tandem-last-compaction" ]
-}
-
-@test "next-nudge file: shows Grown. and content, cleaned up" {
-  mkdir -p "$HOME/.tandem"
-  echo "Consider using dependency injection for testability." > "$HOME/.tandem/next-nudge"
-
-  run_session_start
-  assert_success
-  assert_output --partial "Grown."
-  assert_output --partial "dependency injection"
-  [ ! -f "$HOME/.tandem/next-nudge" ]
 }
 
 # ─── 28. Recurrence ─────────────────────────────────────────────────────────
@@ -448,50 +423,38 @@ EOF
   assert_output --partial "Context carried forward"
 }
 
-# ─── 31–34. Checkpoint detection ────────────────────────────────────────────
+# ─── 31. Migration ───────────────────────────────────────────────────────────
 
-@test "last commit is auto-commit: shows Last auto-commit message" {
-  init_test_git_repo
-  make_auto_commit
-
+@test "migrates progress.md from auto-memory to progress dir" {
+  echo "old progress data" > "$TEST_MEMORY_DIR/progress.md"
+  rm -f "$TEST_PROGRESS_DIR/progress.md"
   run_session_start
   assert_success
-  assert_output --partial 'Last auto-commit:'
-  assert_output --partial 'chore(tandem): session checkpoint'
+  [ -f "$TEST_PROGRESS_DIR/progress.md" ]
+  [ ! -f "$TEST_MEMORY_DIR/progress.md" ]
+  grep -q "old progress data" "$TEST_PROGRESS_DIR/progress.md"
 }
 
-@test "multiple consecutive auto-commits: shows N auto-commits message" {
-  init_test_git_repo
-  make_auto_commit
-  make_auto_commit
-  make_auto_commit
-
+@test "removes stale auto-memory progress.md when new location exists" {
+  echo "new data" > "$TEST_PROGRESS_DIR/progress.md"
+  echo "old data" > "$TEST_MEMORY_DIR/progress.md"
   run_session_start
   assert_success
-  assert_output --partial '3 auto-commits, latest:'
+  [ -f "$TEST_PROGRESS_DIR/progress.md" ]
+  [ ! -f "$TEST_MEMORY_DIR/progress.md" ]
 }
 
-@test "TANDEM_AUTO_SQUASH=1: message says will be squashed" {
-  export TANDEM_AUTO_SQUASH=1
-  init_test_git_repo
-  make_auto_commit
+# ─── 32. Gitignore ──────────────────────────────────────────────────────────
 
+@test "ensures .claude/.gitignore contains progress.md in git repos" {
+  init_test_git_repo
   run_session_start
   assert_success
-  assert_output --partial "Will be squashed into your next commit"
+  [ -f "$TEST_CWD/.claude/.gitignore" ]
+  grep -q '^progress\.md$' "$TEST_CWD/.claude/.gitignore"
 }
 
-@test "TANDEM_AUTO_SQUASH=0: message says squash before pushing" {
-  export TANDEM_AUTO_SQUASH=0
-  init_test_git_repo
-  make_auto_commit
-
-  run_session_start
-  assert_success
-  assert_output --partial "Squash before pushing"
-}
-
-# ─── 35. Invariants ─────────────────────────────────────────────────────────
+# ─── 33. Invariants ─────────────────────────────────────────────────────────
 
 @test "always outputs header first (first line contains logo)" {
   run_session_start

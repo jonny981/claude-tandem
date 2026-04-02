@@ -70,22 +70,21 @@ _tandem_relative_age() {
   fi
 }
 
-# Usage: tandem_header [memory_dir]
+# Usage: tandem_header [memory_dir] [progress_dir]
 tandem_header() {
   local memory_dir="${1:-}"
-  local version stats sessions clarifications compactions updates
+  local progress_dir="${2:-$memory_dir}"
+  local version stats sessions compactions updates
   version=$(jq -r '.version // "?"' "$PLUGIN_ROOT/.claude-plugin/plugin.json" 2>/dev/null || echo "?")
   if [ -f "$HOME/.tandem/state/stats.json" ]; then
     stats=$(cat "$HOME/.tandem/state/stats.json")
     sessions=$(echo "$stats" | jq -r '.total_sessions // 0')
-    clarifications=$(echo "$stats" | jq -r '.clarifications // 0')
     compactions=$(echo "$stats" | jq -r '.compactions // 0')
-    updates=$(echo "$stats" | jq -r '.profile_updates // 0')
   else
-    sessions=0 clarifications=0 compactions=0 updates=0
+    sessions=0 compactions=0
   fi
 
-  local line="${_TANDEM_LOGO} ~ Tandem v${version} · ▷ ${sessions} · ✎ ${clarifications} · ↻ ${compactions} · ◆ ${updates}"
+  local line="${_TANDEM_LOGO} ~ Tandem v${version} · ▷ ${sessions} · ↻ ${compactions}"
 
   # Append file ages if memory_dir is known
   if [ -n "$memory_dir" ]; then
@@ -93,8 +92,8 @@ tandem_header() {
     if [ -f "$memory_dir/MEMORY.md" ]; then
       mem_age=$(_tandem_relative_age "$(tandem_file_mtime "$memory_dir/MEMORY.md")")
     fi
-    if [ -f "$memory_dir/progress.md" ]; then
-      prog_age=$(_tandem_relative_age "$(tandem_file_mtime "$memory_dir/progress.md")")
+    if [ -f "$progress_dir/progress.md" ]; then
+      prog_age=$(_tandem_relative_age "$(tandem_file_mtime "$progress_dir/progress.md")")
     fi
     line="${line} · mem:${mem_age} prog:${prog_age}"
   fi
@@ -108,6 +107,31 @@ tandem_header() {
 # Linux stat -c works first; macOS stat -f as fallback.
 tandem_file_mtime() {
   stat -c '%Y' "$1" 2>/dev/null || stat -f '%m' "$1" 2>/dev/null
+}
+
+# ─── Path helpers ─────────────────────────────────────────────────────────
+
+# Returns the directory containing progress.md for a given CWD.
+# In git repos: <git-root>/.claude (repo-scoped, visible).
+# Outside git: ~/.tandem/progress/<cwd-slug> (fallback).
+# Usage: tandem_progress_dir <cwd>
+tandem_progress_dir() {
+  local cwd="$1"
+  local root
+  root=$(git -C "$cwd" rev-parse --show-toplevel 2>/dev/null)
+  if [ -n "$root" ]; then
+    echo "$root/.claude"
+  else
+    echo "$HOME/.tandem/progress/$(echo "$cwd" | sed 's|/|-|g')"
+  fi
+}
+
+# Returns the Claude Code auto-memory directory for a given CWD.
+# CWD-scoped (matches Claude Code's native convention).
+# Usage: tandem_memory_dir <cwd>
+tandem_memory_dir() {
+  local cwd="$1"
+  echo "$HOME/.claude/projects/$(echo "$cwd" | sed 's|/|-|g')/memory"
 }
 
 # ─── Dependency helpers ───────────────────────────────────────────────────────

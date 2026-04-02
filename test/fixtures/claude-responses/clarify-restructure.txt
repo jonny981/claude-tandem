@@ -1,1 +1,0 @@
-Please implement a user authentication system with OAuth2 support. The system should handle login, logout, and session management. Use JWT tokens for API authentication and store refresh tokens securely in the database.

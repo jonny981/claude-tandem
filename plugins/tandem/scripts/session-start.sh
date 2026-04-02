@@ -17,11 +17,10 @@ INPUT=$(cat)
 CWD=$(echo "$INPUT" | jq -r '.cwd // empty')
 [ -z "$CWD" ] && exit 0
 
-# Compute auto-memory directory (same convention as Claude Code)
-SANITISED=$(echo "$CWD" | sed 's|/|-|g')
-MEMORY_DIR="$HOME/.claude/projects/${SANITISED}/memory"
+# Compute memory and progress directories
+MEMORY_DIR=$(tandem_memory_dir "$CWD")
+PROGRESS_DIR=$(tandem_progress_dir "$CWD")
 
-PROFILE_DIR="${TANDEM_PROFILE_DIR:-$HOME/.tandem/profile}"
 RULES_DIR="$HOME/.claude/rules"
 MARKER_FILE="$HOME/.tandem/.provisioned"
 
@@ -38,12 +37,6 @@ if [ ! -f "$MARKER_FILE" ]; then
   if [ -f "$PLUGIN_ROOT/rules/tandem-recall.md" ]; then
     mkdir -p "$RULES_DIR"
     cp "$PLUGIN_ROOT/rules/tandem-recall.md" "$RULES_DIR/tandem-recall.md"
-    PROVISIONED=1
-  fi
-
-  if [ -f "$PLUGIN_ROOT/rules/tandem-grow.md" ]; then
-    mkdir -p "$RULES_DIR"
-    cp "$PLUGIN_ROOT/rules/tandem-grow.md" "$RULES_DIR/tandem-grow.md"
     PROVISIONED=1
   fi
 
@@ -65,18 +58,18 @@ if [ ! -f "$MARKER_FILE" ]; then
     PROVISIONED=1
   fi
 
-  if [ ! -d "$PROFILE_DIR" ]; then
-    mkdir -p "$PROFILE_DIR"
-    if [ -f "$PLUGIN_ROOT/templates/USER.md" ]; then
-      cp "$PLUGIN_ROOT/templates/USER.md" "$PROFILE_DIR/USER.md"
-    fi
+  # Statusline script
+  if [ -f "$PLUGIN_ROOT/scripts/statusline.sh" ]; then
+    mkdir -p "$HOME/.tandem/bin"
+    cp "$PLUGIN_ROOT/scripts/statusline.sh" "$HOME/.tandem/bin/statusline.sh"
+    chmod +x "$HOME/.tandem/bin/statusline.sh"
     PROVISIONED=1
   fi
 
   if [ "$PROVISIONED" -eq 1 ]; then
     mkdir -p "$(dirname "$MARKER_FILE")"
     date +%s > "$MARKER_FILE"
-    tandem_log info "provisioned rules and profile"
+    tandem_log info "provisioned rules"
     FIRST_RUN=1
   fi
 fi
@@ -99,12 +92,36 @@ if [ ! -f "$HOME/.tandem/state/stats.json" ]; then
     total_sessions: 0,
     first_session: (now | strftime("%Y-%m-%d")),
     last_session: (now | strftime("%Y-%m-%d")),
-    clarifications: 0,
     compactions: 0,
-    profile_updates: 0,
-    milestones_hit: [],
-    profile_total_lines: 0
+    milestones_hit: []
   }' > "$HOME/.tandem/state/stats.json"
+fi
+
+# --- Statusline setting (idempotent) ---
+
+STATUSLINE_SCRIPT="$HOME/.tandem/bin/statusline.sh"
+SETTINGS_FILE="$HOME/.claude/settings.json"
+if [ -f "$STATUSLINE_SCRIPT" ] && [ -f "$SETTINGS_FILE" ]; then
+  CURRENT_SL=$(jq -r '.statusLine.command // empty' "$SETTINGS_FILE" 2>/dev/null)
+  if [ "$CURRENT_SL" != "$STATUSLINE_SCRIPT" ]; then
+    TMPFILE=$(mktemp)
+    if jq --arg cmd "$STATUSLINE_SCRIPT" '.statusLine = {"type": "command", "command": $cmd}' "$SETTINGS_FILE" > "$TMPFILE" 2>/dev/null && [ -s "$TMPFILE" ]; then
+      mv "$TMPFILE" "$SETTINGS_FILE"
+      tandem_log info "configured statusLine in settings.json"
+    else
+      rm -f "$TMPFILE"
+    fi
+  fi
+fi
+
+# --- Statusline script upgrade (keep in sync with plugin source) ---
+
+if [ -f "$PLUGIN_ROOT/scripts/statusline.sh" ] && [ -f "$STATUSLINE_SCRIPT" ]; then
+  if ! cmp -s "$PLUGIN_ROOT/scripts/statusline.sh" "$STATUSLINE_SCRIPT"; then
+    cp "$PLUGIN_ROOT/scripts/statusline.sh" "$STATUSLINE_SCRIPT"
+    chmod +x "$STATUSLINE_SCRIPT"
+    tandem_log info "upgraded statusline script"
+  fi
 fi
 
 # --- Version-based rules upgrade ---
@@ -127,25 +144,35 @@ if [ -n "$PLUGIN_VERSION" ]; then
   done
 fi
 
-# --- Clean up legacy settings.json hook provisioning ---
-# Previously provisioned UserPromptSubmit into settings.json as a workaround for a
-# Claude Code bug. This caused double-firing (hooks.json + settings.json) and cascade
-# storms. Now using hooks.json only. Remove legacy entry if present.
-SETTINGS_FILE="$HOME/.claude/settings.json"
-if [ -f "$SETTINGS_FILE" ]; then
-  HAS_HOOK=$(jq '[.hooks.UserPromptSubmit // [] | .[].hooks[]? | select(.command | test("detect-raw-input"))] | length' "$SETTINGS_FILE" 2>/dev/null)
-  if [ "${HAS_HOOK:-0}" != "0" ]; then
-    TMPFILE=$(mktemp)
-    jq '.hooks.UserPromptSubmit = [.hooks.UserPromptSubmit // [] | .[] | select(.hooks | all(.command | test("detect-raw-input") | not))]' "$SETTINGS_FILE" > "$TMPFILE"
-    if [ $? -eq 0 ] && [ -s "$TMPFILE" ]; then
-      mv "$TMPFILE" "$SETTINGS_FILE"
-      tandem_log info "removed legacy detect-raw-input from settings.json"
-    else
-      rm -f "$TMPFILE"
-    fi
+# --- Clean up legacy files from previous Tandem versions ---
+rm -f "$HOME/.tandem/bin/detect-raw-input.sh" 2>/dev/null
+rm -f "$RULES_DIR/tandem-clarify.md" 2>/dev/null
+rm -f "$RULES_DIR/tandem-grow.md" 2>/dev/null
+
+# --- Migrate progress.md from auto-memory to repo-scoped location ---
+OLD_PROGRESS="$MEMORY_DIR/progress.md"
+NEW_PROGRESS="$PROGRESS_DIR/progress.md"
+
+if [ -f "$OLD_PROGRESS" ] && [ ! -f "$NEW_PROGRESS" ]; then
+  mkdir -p "$PROGRESS_DIR"
+  cp "$OLD_PROGRESS" "$NEW_PROGRESS"
+  rm -f "$OLD_PROGRESS"
+  tandem_log info "migrated progress.md to $PROGRESS_DIR"
+elif [ -f "$OLD_PROGRESS" ] && [ -f "$NEW_PROGRESS" ]; then
+  rm -f "$OLD_PROGRESS"
+  tandem_log info "removed stale progress.md from auto-memory"
+fi
+
+# --- Ensure .claude/progress.md is gitignored ---
+GIT_ROOT=$(git -C "$CWD" rev-parse --show-toplevel 2>/dev/null)
+if [ -n "$GIT_ROOT" ]; then
+  CLAUDE_GITIGNORE="$GIT_ROOT/.claude/.gitignore"
+  if [ ! -f "$CLAUDE_GITIGNORE" ] || ! grep -q '^progress\.md$' "$CLAUDE_GITIGNORE" 2>/dev/null; then
+    mkdir -p "$GIT_ROOT/.claude"
+    echo "progress.md" >> "$CLAUDE_GITIGNORE"
+    tandem_log info "added progress.md to .claude/.gitignore"
   fi
 fi
-rm -f "$HOME/.tandem/bin/detect-raw-input.sh" 2>/dev/null
 
 # --- CLAUDE.md section injection ---
 
@@ -153,7 +180,7 @@ CLAUDE_MD="$HOME/.claude/CLAUDE.md"
 TANDEM_VERSION="v${PLUGIN_VERSION:-1.2.0}"
 TANDEM_SECTION="<!-- tandem:start ${TANDEM_VERSION} -->
 ## Tandem — Session Progress
-Maintain progress.md in your auto-memory directory with two parts: a rewritable Working State section (between \`<!-- working-state:start/end -->\` markers) capturing current task, approach, blockers, and key files, plus an append-only Session Log below. Create progress.md with the Working State template on your first significant action if it doesn't exist. This enables memory continuity between sessions.
+Read .claude/progress.md (at the repo root) for current session state. Maintain it with two parts: a rewritable Working State section (between \`<!-- working-state:start/end -->\` markers) capturing current task, approach, blockers, and key files, plus an append-only Session Log below. Create it on your first significant action if it doesn't exist. Update Working State on plan mode transitions, not just code changes. Planning and decision-making are progress. This enables memory continuity between sessions.
 <!-- tandem:end -->"
 
 if [ ! -f "$CLAUDE_MD" ]; then
@@ -208,19 +235,19 @@ fi
 
 # --- Post-compaction state recovery (outputs directly, before Tandem block) ---
 
-if [ -f "$MEMORY_DIR/progress.md" ] && grep -q '## Pre-compaction State' "$MEMORY_DIR/progress.md"; then
+if [ -f "$PROGRESS_DIR/progress.md" ] && grep -q '## Pre-compaction State' "$PROGRESS_DIR/progress.md"; then
   # Prefer structured Working State over free-form Pre-compaction State
   STATE_CONTENT=""
-  if grep -q '<!-- working-state:start -->' "$MEMORY_DIR/progress.md" 2>/dev/null; then
+  if grep -q '<!-- working-state:start -->' "$PROGRESS_DIR/progress.md" 2>/dev/null; then
     STATE_CONTENT=$(sed -n '/<!-- working-state:start -->/,/<!-- working-state:end -->/p' \
-      "$MEMORY_DIR/progress.md" | grep -v '<!-- working-state')
+      "$PROGRESS_DIR/progress.md" | grep -v '<!-- working-state')
   fi
 
   # Fall back to Pre-compaction State if no structured state
   if [ -z "$STATE_CONTENT" ]; then
-    STATE_CONTENT=$(sed -n '/^## Pre-compaction State$/,/^## /{ /^## Pre-compaction State$/d; /^## /d; p; }' "$MEMORY_DIR/progress.md")
+    STATE_CONTENT=$(sed -n '/^## Pre-compaction State$/,/^## /{ /^## Pre-compaction State$/d; /^## /d; p; }' "$PROGRESS_DIR/progress.md")
     if [ -z "$STATE_CONTENT" ]; then
-      STATE_CONTENT=$(sed -n '/^## Pre-compaction State$/,$p' "$MEMORY_DIR/progress.md" | tail -n +2)
+      STATE_CONTENT=$(sed -n '/^## Pre-compaction State$/,$p' "$PROGRESS_DIR/progress.md" | tail -n +2)
     fi
   fi
 
@@ -231,11 +258,11 @@ if [ -f "$MEMORY_DIR/progress.md" ] && grep -q '## Pre-compaction State' "$MEMOR
 
   TMPFILE=$(mktemp)
   if [ -n "$TMPFILE" ] && [ -f "$TMPFILE" ]; then
-    sed '/^## Auto-captured (pre-compaction)$/,$d; /^## Pre-compaction State$/,$d' "$MEMORY_DIR/progress.md" > "$TMPFILE"
+    sed '/^## Auto-captured (pre-compaction)$/,$d; /^## Pre-compaction State$/,$d' "$PROGRESS_DIR/progress.md" > "$TMPFILE"
     if [ $? -eq 0 ]; then
       sed -i.bak -e :a -e '/^\n*$/{$d;N;ba;}' "$TMPFILE" 2>/dev/null || sed -e :a -e '/^\n*$/{$d;N;ba;}' "$TMPFILE" > "${TMPFILE}.clean" && mv "${TMPFILE}.clean" "$TMPFILE"
       rm -f "${TMPFILE}.bak"
-      mv "$TMPFILE" "$MEMORY_DIR/progress.md"
+      mv "$TMPFILE" "$PROGRESS_DIR/progress.md"
     else
       tandem_log warn "failed to strip state section from progress.md"
       rm -f "$TMPFILE"
@@ -243,10 +270,10 @@ if [ -f "$MEMORY_DIR/progress.md" ] && grep -q '## Pre-compaction State' "$MEMOR
   else
     tandem_log warn "failed to create temp file for progress.md state cleanup"
   fi
-elif [ -f "$MEMORY_DIR/progress.md" ] && grep -q '<!-- working-state:start -->' "$MEMORY_DIR/progress.md" 2>/dev/null; then
+elif [ -f "$PROGRESS_DIR/progress.md" ] && grep -q '<!-- working-state:start -->' "$PROGRESS_DIR/progress.md" 2>/dev/null; then
   # Previous session ended without compaction — Working State markers still present
   STATE_CONTENT=$(sed -n '/<!-- working-state:start -->/,/<!-- working-state:end -->/p' \
-    "$MEMORY_DIR/progress.md" | grep -v '<!-- working-state')
+    "$PROGRESS_DIR/progress.md" | grep -v '<!-- working-state')
   if [ -n "$STATE_CONTENT" ]; then
     echo "Continuing from previous session:"
     echo "$STATE_CONTENT"
@@ -302,21 +329,7 @@ fi
 
 # --- Header (always first, always output) ---
 
-tandem_header "$MEMORY_DIR"
-
-# --- User profile injection (lower priority than CLAUDE.md, MEMORY.md, git) ---
-
-if [ -f "$PROFILE_DIR/USER.md" ]; then
-  PROFILE_LINES=$(wc -l < "$PROFILE_DIR/USER.md" | tr -d ' ')
-  # Only inject if profile has real content (not just the template)
-  if [ "$PROFILE_LINES" -gt 15 ]; then
-    echo ""
-    echo "<user-profile>"
-    cat "$PROFILE_DIR/USER.md"
-    echo "</user-profile>"
-    echo ""
-  fi
-fi
+tandem_header "$MEMORY_DIR" "$PROGRESS_DIR"
 
 # --- Detail lines (plain, no logo) ---
 
@@ -361,9 +374,7 @@ if [ -n "${NEW_STATS:-}" ]; then
   for MILESTONE in 10 50 100 500 1000; do
     if [ "$TOTAL" -eq "$MILESTONE" ] && ! echo "$MILESTONES_HIT" | grep -q "$MILESTONE"; then
       COMPACTIONS=$(echo "$NEW_STATS" | jq -r '.compactions')
-      UPDATES=$(echo "$NEW_STATS" | jq -r '.profile_updates')
-      PROFILE_LINES=$(echo "$NEW_STATS" | jq -r '.profile_total_lines')
-      echo "Milestone: ${MILESTONE} sessions! Profile: ${PROFILE_LINES} lines, ${COMPACTIONS} compactions, ${UPDATES} profile updates."
+      echo "Milestone: ${MILESTONE} sessions! ${COMPACTIONS} compactions."
       jq ".milestones_hit += [\"$MILESTONE\"]" "$STATS_FILE" > "$STATS_FILE.tmp"
       mv "$STATS_FILE.tmp" "$STATS_FILE"
     fi
@@ -374,27 +385,10 @@ fi
 # Last session recap
 RECAP_FILE="$HOME/.tandem/.last-session-recap"
 if [ -f "$RECAP_FILE" ]; then
-  RECALL=$(grep '^recall_status: 1' "$RECAP_FILE" &>/dev/null && echo 1 || echo 0)
-  GROW=$(grep '^grow_status: 1' "$RECAP_FILE" &>/dev/null && echo 1 || echo 0)
-
-  if [ "$RECALL" -eq 1 ] || [ "$GROW" -eq 1 ]; then
-    RECAP_MSG="Last session: "
-    if [ "$RECALL" -eq 1 ]; then
-      LINES=$(grep '^memory_lines:' "$RECAP_FILE" | cut -d' ' -f2)
-      RECAP_MSG="${RECAP_MSG}memory compacted (${LINES} lines)"
-    fi
-    if [ "$GROW" -eq 1 ]; then
-      FILES=$(grep '^profile_files:' "$RECAP_FILE" | cut -d' ' -f2-)
-      if [ "$RECALL" -eq 1 ]; then RECAP_MSG="${RECAP_MSG}. "; fi
-      if [ -n "$FILES" ]; then
-        RECAP_MSG="${RECAP_MSG}Profile updated: ${FILES}"
-      else
-        RECAP_MSG="${RECAP_MSG}Profile updated"
-      fi
-    fi
-    echo "$RECAP_MSG"
+  LINES=$(grep '^memory_lines:' "$RECAP_FILE" 2>/dev/null | cut -d' ' -f2)
+  if [ -n "$LINES" ]; then
+    echo "Last session: memory at ${LINES} lines."
   fi
-
   rm -f "$RECAP_FILE"
 fi
 
@@ -408,26 +402,15 @@ if [ -f "$TANDEM_LOG" ] && [ -n "$PLUGIN_VERSION" ]; then
   fi
 fi
 
-# Recalled/Grown indicators
+# Recalled indicator
 if [ -f "$MEMORY_DIR/.tandem-last-compaction" ]; then
   if [ -f "$HOME/.tandem/state/stats.json" ]; then
     TOTAL_COMPACTIONS=$(jq -r '.compactions' "$HOME/.tandem/state/stats.json")
-    PROFILE_LINES=$(jq -r '.profile_total_lines' "$HOME/.tandem/state/stats.json")
-    echo "Recalled. (${TOTAL_COMPACTIONS} compactions total, profile: ${PROFILE_LINES} lines)"
+    echo "Recalled. (${TOTAL_COMPACTIONS} compactions total)"
   else
     echo "Recalled."
   fi
   rm -f "$MEMORY_DIR/.tandem-last-compaction"
-fi
-
-NUDGE_FILE="$HOME/.tandem/next-nudge"
-if [ -f "$NUDGE_FILE" ]; then
-  NUDGE_CONTENT=$(cat "$NUDGE_FILE")
-  if [ -n "$NUDGE_CONTENT" ]; then
-    echo "Grown."
-    echo "${NUDGE_CONTENT}"
-  fi
-  rm -f "$NUDGE_FILE"
 fi
 
 # Recurrence alerts
@@ -474,49 +457,14 @@ if [ -f "$GLOBAL_FILE" ]; then
 fi
 
 # Stale progress detection
-if [ -f "$MEMORY_DIR/progress.md" ]; then
-  PROGRESS_MTIME=$(tandem_file_mtime "$MEMORY_DIR/progress.md")
+if [ -f "$PROGRESS_DIR/progress.md" ]; then
+  PROGRESS_MTIME=$(tandem_file_mtime "$PROGRESS_DIR/progress.md")
   SESSION_START=$(date +%s)
 
   if [ -n "$PROGRESS_MTIME" ]; then
     AGE=$((SESSION_START - PROGRESS_MTIME))
     if [ "$AGE" -gt 300 ]; then
       echo "Previous session notes found. Context carried forward."
-    fi
-  fi
-fi
-
-# Tandem checkpoint detection
-if git -C "$CWD" rev-parse --git-dir &>/dev/null; then
-  LAST_MSG=$(git -C "$CWD" log -1 --format="%s" 2>/dev/null)
-  if [[ "$LAST_MSG" == claude\(checkpoint\):* ]] || \
-     [[ "$LAST_MSG" == "chore(tandem): session checkpoint" ]] || \
-     [[ "$LAST_MSG" == "chore(tandem): session context" ]]; then
-    # Count consecutive auto-commits from HEAD
-    AC_COUNT=0
-    while true; do
-      AC_SHA=$(git -C "$CWD" rev-parse "HEAD~${AC_COUNT}" 2>/dev/null) || break
-      AC_SUBJ=$(git -C "$CWD" log -1 --format="%s" "$AC_SHA" 2>/dev/null)
-      if [[ "$AC_SUBJ" == claude\(checkpoint\):* ]] || \
-         [[ "$AC_SUBJ" == "chore(tandem): session checkpoint" ]] || \
-         [[ "$AC_SUBJ" == "chore(tandem): session context" ]] || \
-         git -C "$CWD" log -1 --format='%B' "$AC_SHA" 2>/dev/null | grep -q 'Tandem-Auto-Commit: true'; then
-        AC_COUNT=$((AC_COUNT + 1))
-      else
-        break
-      fi
-    done
-    LAST_HASH=$(git -C "$CWD" log -1 --format="%h" 2>/dev/null)
-    LAST_DATE=$(git -C "$CWD" log -1 --format="%ai" 2>/dev/null | cut -d' ' -f1,2 | cut -d: -f1,2)
-    if [ "$AC_COUNT" -gt 1 ]; then
-      COMMIT_LABEL="${AC_COUNT} auto-commits, latest: ${LAST_DATE} ${LAST_HASH}"
-    else
-      COMMIT_LABEL="Last auto-commit: ${LAST_DATE} ${LAST_HASH} \"${LAST_MSG}\""
-    fi
-    if [ "${TANDEM_AUTO_SQUASH:-1}" = "0" ]; then
-      echo "${COMMIT_LABEL}. Squash before pushing, or use /tandem:squash."
-    else
-      echo "${COMMIT_LABEL}. Will be squashed into your next commit."
     fi
   fi
 fi

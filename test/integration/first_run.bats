@@ -14,7 +14,6 @@ _clean_session_start() {
   rm -f "$HOME/.tandem/.provisioned"
   rm -f "$HOME/.tandem/state/stats.json"
   rm -rf "$HOME/.claude/rules/tandem-"*
-  rm -rf "$HOME/.tandem/profile"
   rm -f "$HOME/.claude/CLAUDE.md"
   # Create a minimal settings.json so the hook doesn't error on jq parse
   mkdir -p "$HOME/.claude"
@@ -23,7 +22,7 @@ _clean_session_start() {
 
 # ─── Tests ────────────────────────────────────────────────────────────────────
 
-@test "first run: session-start provisions rules, profile, stats, and CLAUDE.md" {
+@test "first run: session-start provisions rules, stats, and CLAUDE.md" {
   _clean_session_start
 
   run_script_with_input "session-start.sh" "$(fixture_sessionstart)"
@@ -32,12 +31,8 @@ _clean_session_start() {
 
   # Rules files provisioned
   [ -f "$HOME/.claude/rules/tandem-recall.md" ]
-  [ -f "$HOME/.claude/rules/tandem-grow.md" ]
   [ -f "$HOME/.claude/rules/tandem-display.md" ]
   [ -f "$HOME/.claude/rules/tandem-commits.md" ]
-
-  # Profile directory created
-  [ -d "$HOME/.tandem/profile" ]
 
   # Stats file initialised
   [ -f "$HOME/.tandem/state/stats.json" ]
@@ -145,8 +140,6 @@ _clean_session_start() {
   [[ "$keys" == *"first_session"* ]]
   [[ "$keys" == *"last_session"* ]]
   [[ "$keys" == *"milestones_hit"* ]]
-  [[ "$keys" == *"profile_total_lines"* ]]
-  [[ "$keys" == *"profile_updates"* ]]
   [[ "$keys" == *"total_sessions"* ]]
 
   # Values are correct types

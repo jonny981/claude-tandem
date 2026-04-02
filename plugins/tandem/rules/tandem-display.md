@@ -5,7 +5,7 @@
 
 When the user starts a session with **"Let's work in Tandem"**, display the Tandem startup output and follow all Tandem rules for the session.
 
-When the user starts with **"Skip Tandem"**, acknowledge briefly and disable all Tandem behaviour for the session: no startup display, no progress.md writing, no Grow mentions, no Recall. Hooks still run silently in the background.
+When the user starts with **"Skip Tandem"**, acknowledge briefly and disable all Tandem behaviour for the session: no startup display, no progress.md writing, no Recall. Hooks still run silently in the background.
 
 ## Display rules
 

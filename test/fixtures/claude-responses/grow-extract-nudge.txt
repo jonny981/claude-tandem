@@ -1,6 +1,0 @@
-FILE: shell-scripting.md
-## Bash 3.2 Compatibility
-- Heredoc parsing differs from modern bash
-- Use unquoted heredocs, escape backticks
----
-NUDGE: You have been working extensively with bash 3.2 compatibility. Consider exploring shellcheck's --shell=bash flag to catch version-specific issues early.

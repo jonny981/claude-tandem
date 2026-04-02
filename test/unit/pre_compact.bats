@@ -80,7 +80,7 @@ _create_transcript() {
   assert_success
   assert_output ""
   # progress.md should be untouched
-  run cat "$TEST_MEMORY_DIR/progress.md"
+  run cat "$TEST_PROGRESS_DIR/progress.md"
   assert_output "existing content"
 }
 
@@ -94,7 +94,7 @@ _create_transcript() {
 
   assert_success
   # progress.md unchanged
-  run cat "$TEST_MEMORY_DIR/progress.md"
+  run cat "$TEST_PROGRESS_DIR/progress.md"
   assert_output "existing content"
 }
 
@@ -111,7 +111,7 @@ _create_transcript() {
   assert_success
 
   # Should contain state section
-  run cat "$TEST_MEMORY_DIR/progress.md"
+  run cat "$TEST_PROGRESS_DIR/progress.md"
   assert_output --partial "## Pre-compaction State"
   assert_output --partial "Working on user authentication module"
   # Should NOT contain progress section
@@ -128,7 +128,7 @@ _create_transcript() {
 
   assert_success
 
-  run cat "$TEST_MEMORY_DIR/progress.md"
+  run cat "$TEST_PROGRESS_DIR/progress.md"
   assert_output --partial "first line of existing notes"
   assert_output --partial "## Pre-compaction State"
 }
@@ -145,7 +145,7 @@ _create_transcript() {
 
   assert_success
 
-  run cat "$TEST_MEMORY_DIR/progress.md"
+  run cat "$TEST_PROGRESS_DIR/progress.md"
   assert_output --partial "## Pre-compaction State"
   assert_output --partial "## Auto-captured (pre-compaction)"
   assert_output --partial "Working on user authentication module"
@@ -162,7 +162,7 @@ _create_transcript() {
 
   assert_success
 
-  run cat "$TEST_MEMORY_DIR/progress.md"
+  run cat "$TEST_PROGRESS_DIR/progress.md"
   assert_output --partial "pre-existing work log"
 }
 
@@ -171,15 +171,15 @@ _create_transcript() {
 @test "missing progress.md: file created with both sections" {
   local transcript
   transcript=$(_create_transcript)
-  rm -f "$TEST_MEMORY_DIR/progress.md"
+  rm -f "$TEST_PROGRESS_DIR/progress.md"
   _install_mock_claude_fixture "precompact-state-and-progress.txt"
 
   run_script_with_input "pre-compact.sh" "$(fixture_precompact "$TEST_CWD" "$transcript")"
 
   assert_success
 
-  [ -f "$TEST_MEMORY_DIR/progress.md" ]
-  run cat "$TEST_MEMORY_DIR/progress.md"
+  [ -f "$TEST_PROGRESS_DIR/progress.md" ]
+  run cat "$TEST_PROGRESS_DIR/progress.md"
   assert_output --partial "## Pre-compaction State"
   assert_output --partial "## Auto-captured (pre-compaction)"
 }
@@ -196,7 +196,7 @@ _create_transcript() {
 
   assert_success
 
-  run grep -c "## Pre-compaction State" "$TEST_MEMORY_DIR/progress.md"
+  run grep -c "## Pre-compaction State" "$TEST_PROGRESS_DIR/progress.md"
   assert_output "1"
 }
 
@@ -210,7 +210,7 @@ _create_transcript() {
 
   assert_success
 
-  run grep -c "## Auto-captured (pre-compaction)" "$TEST_MEMORY_DIR/progress.md"
+  run grep -c "## Auto-captured (pre-compaction)" "$TEST_PROGRESS_DIR/progress.md"
   assert_output "1"
 }
 

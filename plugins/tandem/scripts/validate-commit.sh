@@ -92,8 +92,7 @@ if [ -z "$SUBSTANTIVE_BODY" ]; then
   CWD=$(echo "$INPUT" | jq -r '.cwd // empty')
   PROGRESS_CONTEXT=""
   if [ -n "$CWD" ]; then
-    SANITISED=$(echo "$CWD" | sed 's|/|-|g')
-    PROGRESS_FILE="$HOME/.claude/projects/${SANITISED}/memory/progress.md"
+    PROGRESS_FILE="$(tandem_progress_dir "$CWD")/progress.md"
     if [ -f "$PROGRESS_FILE" ]; then
       PROGRESS_CONTEXT=$(tail -10 "$PROGRESS_FILE")
     fi

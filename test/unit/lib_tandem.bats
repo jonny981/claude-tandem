@@ -81,14 +81,14 @@ _source_lib() {
 }
 
 @test "tandem_header outputs version and stats from stats.json" {
-  create_stats 42 7 3
+  create_stats 42 7
   _source_lib
 
   run tandem_header
 
   local plugin_ver
   plugin_ver=$(jq -r '.version' "$PLUGIN_ROOT/.claude-plugin/plugin.json")
-  assert_output "◎╵═╵◎ ~ Tandem v${plugin_ver} · ▷ 42 · ✎ 0 · ↻ 7 · ◆ 3"
+  assert_output "◎╵═╵◎ ~ Tandem v${plugin_ver} · ▷ 42 · ↻ 7"
 }
 
 @test "tandem_header handles missing stats.json with defaults" {
@@ -99,7 +99,7 @@ _source_lib() {
 
   local plugin_ver
   plugin_ver=$(jq -r '.version' "$PLUGIN_ROOT/.claude-plugin/plugin.json")
-  assert_output "◎╵═╵◎ ~ Tandem v${plugin_ver} · ▷ 0 · ✎ 0 · ↻ 0 · ◆ 0"
+  assert_output "◎╵═╵◎ ~ Tandem v${plugin_ver} · ▷ 0 · ↻ 0"
 }
 
 # ─── Dependencies ────────────────────────────────────────────────────────────
@@ -286,4 +286,68 @@ MOCK_EOF
   run tandem_llm_call "hello"
 
   assert_failure
+}
+
+# ─── tandem_progress_dir ────────────────────────────────────────────────────
+
+@test "tandem_progress_dir: returns git-root/.claude for git repos" {
+  _source_lib
+  init_test_git_repo
+  local git_root
+  git_root=$(git -C "$TEST_CWD" rev-parse --show-toplevel)
+
+  run tandem_progress_dir "$TEST_CWD"
+
+  assert_success
+  assert_output "$git_root/.claude"
+}
+
+@test "tandem_progress_dir: returns fallback path for non-git directories" {
+  _source_lib
+  local non_git="$TEST_TEMP_DIR/not-a-repo"
+  mkdir -p "$non_git"
+
+  run tandem_progress_dir "$non_git"
+
+  assert_success
+  local expected_slug
+  expected_slug=$(echo "$non_git" | sed 's|/|-|g')
+  assert_output "$HOME/.tandem/progress/${expected_slug}"
+}
+
+# ─── tandem_memory_dir ──────────────────────────────────────────────────────
+
+@test "tandem_memory_dir: returns CWD-based auto-memory path" {
+  _source_lib
+
+  run tandem_memory_dir "$TEST_CWD"
+
+  assert_success
+  local expected_slug
+  expected_slug=$(echo "$TEST_CWD" | sed 's|/|-|g')
+  assert_output "$HOME/.claude/projects/${expected_slug}/memory"
+}
+
+# ─── tandem_header with progress_dir ────────────────────────────────────────
+
+@test "tandem_header: shows prog age when progress_dir has progress.md" {
+  create_stats 10 2
+  _source_lib
+  echo "test" > "$TEST_PROGRESS_DIR/progress.md"
+
+  run tandem_header "$TEST_MEMORY_DIR" "$TEST_PROGRESS_DIR"
+
+  assert_success
+  assert_output --partial "prog:<1m"
+}
+
+@test "tandem_header: shows prog:- when progress_dir has no progress.md" {
+  create_stats 10 2
+  _source_lib
+  rm -f "$TEST_PROGRESS_DIR/progress.md"
+
+  run tandem_header "$TEST_MEMORY_DIR" "$TEST_PROGRESS_DIR"
+
+  assert_success
+  assert_output --partial "prog:-"
 }
