@@ -5,7 +5,7 @@
     {
       "name": "tandem",
       "source": "./plugins/tandem",
-      "description": "Compound learning for Claude Code — every session makes the next one better"
+      "description": "Session continuity for coding agents: one append-only log per repo, replayed at session start and after compaction"
     }
   ]
 }

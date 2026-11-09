@@ -14,7 +14,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Run shellcheck
-        run: shellcheck --severity=warning plugins/tandem/scripts/*.sh plugins/tandem/lib/tandem.sh
+        run: shellcheck --severity=warning plugins/tandem/scripts/*.sh
 
   test:
     strategy:
@@ -30,8 +30,5 @@ jobs:
         if: runner.os == 'Linux'
         run: sudo apt-get install -y jq
 
-      - name: Run unit tests
-        run: ./test/run_tests.sh unit
-
-      - name: Run integration tests
-        run: ./test/run_tests.sh integration
+      - name: Run tests
+        run: ./test/run_tests.sh

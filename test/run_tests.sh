@@ -1,6 +1,5 @@
 #!/bin/bash
-# Test runner for Tandem bats test suite.
-# Usage: ./test/run_tests.sh [unit|integration|all] [filter]
+# Run Tandem's bats tests. Usage: ./test/run_tests.sh [filter]
 
 set -euo pipefail
 
@@ -12,26 +11,4 @@ if [ ! -x "$BATS" ]; then
   exit 1
 fi
 
-SUITE="${1:-all}"
-FILTER="${2:-}"
-
-BATS_ARGS=(--timing)
-if [ -n "$FILTER" ]; then
-  BATS_ARGS+=(--filter "$FILTER")
-fi
-
-case "$SUITE" in
-  unit)
-    "$BATS" "${BATS_ARGS[@]}" "$SCRIPT_DIR/unit/"
-    ;;
-  integration)
-    "$BATS" "${BATS_ARGS[@]}" "$SCRIPT_DIR/integration/"
-    ;;
-  all)
-    "$BATS" "${BATS_ARGS[@]}" "$SCRIPT_DIR/unit/" "$SCRIPT_DIR/integration/"
-    ;;
-  *)
-    echo "Usage: $0 [unit|integration|all] [filter]"
-    exit 1
-    ;;
-esac
+"$BATS" --timing ${1:+--filter "$1"} "$SCRIPT_DIR/unit/"

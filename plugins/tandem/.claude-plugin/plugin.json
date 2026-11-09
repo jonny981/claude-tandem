@@ -1,6 +1,6 @@
 {
   "name": "tandem",
-  "version": "2.0.0",
-  "description": "Compound learning for Claude Code — every session makes the next one better",
+  "version": "3.0.0",
+  "description": "Session continuity for coding agents: one append-only log per repo, replayed at session start and after compaction",
   "author": {"name": "jonny981"}
 }
