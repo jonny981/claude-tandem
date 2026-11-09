@@ -17,9 +17,16 @@ Tandem keeps one append-only log per repo at `.agents/progress.md`, so a new or 
 /plugin install tandem@tandem-marketplace
 ```
 
-**Codex:** in `~/.codex/hooks.json`, run these scripts from `plugins/tandem/scripts/`: `session-start.sh` on `SessionStart`, `log-check.sh` on `Stop`, and `pre-compact.sh` on `PreCompact`.
+**Codex:**
 
-Then add `.agents/progress.md` to your global git ignore file.
+```
+codex plugin marketplace add jonny981/claude-tandem
+codex plugin add tandem@tandem-marketplace
+```
+
+Then open `/hooks` in Codex and approve Tandem's hooks.
+
+In both tools, add `.agents/progress.md` to your global git ignore file.
 
 Tandem needs `bash`, `git` and `jq`, plus the `claude` CLI for the before-compaction entry.
 

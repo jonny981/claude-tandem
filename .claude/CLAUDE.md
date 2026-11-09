@@ -14,13 +14,13 @@ Tandem does continuity and nothing else. Version 3.0.0 removed the commit gate, 
 
 ## Constraints
 
-- **Both tools run the same scripts.** Claude Code loads them through the plugin; Codex runs them from `~/.codex/hooks.json`. Use only input fields both send (`cwd`, `session_id`, `transcript_path`, `stop_hook_active`) and never rely on `${CLAUDE_PLUGIN_ROOT}` inside a script.
+- **Both tools install this same plugin** from GitHub (`jonny981/claude-tandem`, `tandem@tandem-marketplace`). Codex reads `.claude-plugin/marketplace.json` and `hooks/hooks.json` as they are, and sets `${CLAUDE_PLUGIN_ROOT}` for hook commands. Scripts use only input fields both send (`cwd`, `session_id`, `transcript_path`, `stop_hook_active`).
 - **Reaching the model:** plain stdout on SessionStart, or `decision: block` on Stop. `systemMessage` is shown only to the user, which is why the 2.x nudges never reached the model.
 - **Portable shell:** bash 3.2 (macOS `/bin/bash`) and Linux. File ages use `stat -c %Y` with a `stat -f %m` fallback.
 - **Silent:** every script exits 0 and writes nothing to stderr.
 - **No recursion:** the Haiku call runs with `--setting-sources ""`, `--tools ""` and `--system-prompt ""`, so it loads no hooks.
 - **Plugin manifest:** `plugin.json` must not have a `hooks` field; Claude Code finds `hooks/hooks.json` itself.
-- **Claude Code loads this plugin from the working tree.** The marketplace is a directory source, so edits here are live in new sessions without a reinstall.
+- **Installed copies come from GitHub, not this folder.** An edit reaches them once it is pushed with a higher `version` in `plugin.json`. Codex also asks for a new `/hooks` review whenever a script changes. To try an edit before that: `claude --plugin-dir plugins/tandem`.
 
 ## Testing
 
