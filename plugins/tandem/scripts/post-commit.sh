@@ -6,6 +6,9 @@
 # Skip if running inside a worker's claude -p call
 [ -n "${TANDEM_WORKER:-}" ] && exit 0
 
+# Quiet mode: no compaction wall after every commit.
+[ -n "${TANDEM_QUIET:-}" ] || [ -f "$HOME/.tandem/quiet" ] && exit 0
+
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(dirname "$(dirname "$0")")}"
 source "$PLUGIN_ROOT/lib/tandem.sh"
 
@@ -24,6 +27,10 @@ case "$COMMAND" in
   *"git commit"*) ;;
   *) exit 0 ;;
 esac
+
+# Consume the /tandem:commit intent sentinel: it authorizes exactly one
+# commit attempt (validate-commit.sh honors it while fresh).
+rm -f "$HOME/.tandem/commit-intent"
 
 # Skip amends (not a new work boundary)
 case "$COMMAND" in

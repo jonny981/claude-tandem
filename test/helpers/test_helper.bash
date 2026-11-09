@@ -69,18 +69,38 @@ run_script_with_input() {
   run bash -c "echo '$json' | '$PLUGIN_ROOT/scripts/$script'"
 }
 
-# Create progress.md with optional age (seconds in the past)
+# Create progress.md with frontmatter + content, optional age (seconds in the past)
 create_progress() {
   local content="$1"
   local age_seconds="${2:-0}"
 
-  echo "$content" > "$TEST_PROGRESS_DIR/progress.md"
+  cat > "$TEST_PROGRESS_DIR/progress.md" <<PROGRESS_EOF
+---
+framework: default
+type: session-progress
+depends_on: []
+feeds: [MEMORY.md]
+---
+${content}
+PROGRESS_EOF
 
   if [ "$age_seconds" -gt 0 ]; then
     local past_time
     past_time=$(($(date +%s) - age_seconds))
     touch -t "$(date -r "$past_time" '+%Y%m%d%H%M.%S' 2>/dev/null || date -d "@$past_time" '+%Y%m%d%H%M.%S' 2>/dev/null)" "$TEST_PROGRESS_DIR/progress.md" 2>/dev/null || true
   fi
+}
+
+# Create an empty progress.md (frontmatter only, no content)
+create_empty_progress() {
+  cat > "$TEST_PROGRESS_DIR/progress.md" <<'PROGRESS_EOF'
+---
+framework: default
+type: session-progress
+depends_on: []
+feeds: [MEMORY.md]
+---
+PROGRESS_EOF
 }
 
 # Create MEMORY.md

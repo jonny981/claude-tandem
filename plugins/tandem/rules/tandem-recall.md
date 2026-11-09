@@ -1,80 +1,77 @@
 <!-- tandem v2.0.0 -->
 # Tandem Recall
 
-progress.md is the source of truth for the memory pipeline. If it is empty, commits have no session context, memory never updates, and session knowledge is lost. The entire pipeline depends on it: progress.md → commit body → MEMORY.md → CLAUDE.md. An empty progress.md breaks every downstream step.
+progress.md is an append-only session log. It captures everything the committed artifacts cannot: thinking, reasoning, deliberations, explorations, corrections, constraints, what was known at the time, what shaped the approach. The pipeline depends on it: progress.md → commit body → MEMORY.md → CLAUDE.md. An empty progress.md breaks every downstream step.
 
-**Init:** Create progress.md on your first action if it does not exist. Location: `.claude/progress.md` at the git repo root. If not in a git repo, use `~/.tandem/progress/<cwd-slug>/progress.md`. Start with the frontmatter and Working State template below.
+**Location:** `.claude/progress.md` at the git repo root. If not in a git repo: `~/.tandem/progress/<cwd-slug>/progress.md`.
 
-**Write reflectively, after work is done.** The Stop hook prompts you to reflect on whether progress.md needs updating. When it fires, consider: was the work significant enough to capture? Is this a new direction or a continuation? What reasoning, constraints, or unknowns shaped the approach? If the work was trivial or a continuation with no new context, skip the update. If it was substantive, write a brief, high-level entry. **Planning is progress.** Plan mode transitions, plan creation, and planning decisions all warrant entries.
-
-## Structure
-
-progress.md has frontmatter plus two body parts:
-
-### Frontmatter
+**Format:** YAML frontmatter followed by append-only entries. No structure beyond that. Write freely.
 
 ```yaml
 ---
 framework: default
-project: tandem
 type: session-progress
-target: <project-directory-name>
 depends_on: []
 feeds: [MEMORY.md]
 ---
 ```
 
-### 1. Working State (rewrite as context changes)
+## When to write
 
-<!-- working-state:start -->
-## Working State
-**Current task:** [what you're actively doing]
-**Approach:** [chosen approach and why]
-**Blockers:** [unresolved issues, if any]
-**Key files:** [files being modified]
-<!-- working-state:end -->
+Not every action warrants a progress entry. The bar is significance: would this reasoning be lost if you only looked at the committed artifacts?
 
-Rewrite this section (between the markers) when starting a new task, changing approach, resolving a blocker, entering or exiting plan mode, or completing planning work. This is a snapshot of "right now", not a log.
+**Write when:**
+- You make a design decision (chose X over Y because of Z)
+- The user corrects your approach (tried X, user said no, switched to Y)
+- You explore something that shapes the work (investigated X, found Y, this means Z)
+- You hit a constraint that narrows the solution space
+- You finish a meaningful chunk and the "why" isn't obvious from the diff
+- Planning decisions: what the plan is, what comes next, what was ruled out
 
-### 2. Session Log (append-only, below the markers)
+**Wait when:**
+- The work is trivial (typo fix, obvious change)
+- You are still accumulating context (reading files, exploring)
+- Nothing has happened yet that a future reader would need to understand
 
-The session log feeds directly into the commit body. Write entries that capture reasoning, not just outcomes. Each entry should include: what was done, why that approach was chosen, what constraints shaped it, and any corrections or iterations along the way. If the user corrected your approach, record what you tried first and why it was wrong. The commit body mines this log for its epistemic content.
+Let signal accumulate. One good entry after a decision is worth more than five entries narrating each file read. The commit skill gates on progress having content, so capture the thinking before you commit, not necessarily before every edit.
 
-When creating or working on a plan file, note its full path.
+## What to capture
+
+Anything that would be lost from just looking at the committed files:
+- Why this approach and not another
+- What alternatives were considered and rejected
+- What the user asked for vs what was delivered and why
+- Corrections: what was tried first, why it was wrong
+- Constraints that shaped the decision (technical, user preference, time)
+- Explorations: what was investigated, what was found
+- Planning decisions: what the plan is, why, what comes next
+- What is not yet known or assumed
+
+Do not describe what the diff will show. Describe what the diff cannot.
 
 ## The Pipeline
 
-Commits are the compaction boundary. Use `/tandem:commit` to commit with a structured epistemic record and run the full pipeline.
+Use `/tandem:commit` to commit with the full pipeline:
 
-1. **progress.md** captures session state (you write this reflectively after completing work)
-2. **Commit body** is the permanent epistemic record (authored by the commit skill, referencing tandem-commits.md conventions)
-3. **Compact**: merge relevant learnings from progress.md into MEMORY.md, mine git log for recurring patterns, promote stable patterns to CLAUDE.md
-4. **Reset progress.md** after compaction (frontmatter and Working State template preserved, Session Log cleared, Working State fields reset to placeholders)
+1. **progress.md** captures session reasoning (you write this during work)
+2. **Commit body** is the permanent epistemic record (condensed from progress.md)
+3. **Compact**: merge learnings from progress.md into MEMORY.md, promote stable patterns to CLAUDE.md
+4. **Reset progress.md** after compaction (clear everything after frontmatter)
 
-The commit skill runs steps 2-4 as a single orchestrated flow. Do not skip compaction or deferring it. Session knowledge that isn't compacted into MEMORY.md is lost at the next context compaction.
+## MEMORY.md
 
-## Priority annotations
-
-When writing directly to MEMORY.md, prefix entries:
+When writing directly to MEMORY.md, use priority tiers:
 - [P1] architectural decisions, user preferences, recurring patterns
 - [P2] current project state, recent decisions
 - [P3] one-off details unlikely to survive next compaction
 
-## Dates
-
-Include (observed: YYYY-MM-DD) on MEMORY.md entries to aid temporal reasoning during compaction.
-
-**MEMORY.md:** Write patterns worth persisting to MEMORY.md with [P1]/[P2]/[P3] priority and (observed: YYYY-MM-DD) date.
+Include `(observed: YYYY-MM-DD)` on entries to aid temporal reasoning.
 
 ## CLAUDE.md promotion
 
-The data funnel flows: progress.md → MEMORY.md → CLAUDE.md. Each level is less contextual and more instructional. Commit history is the richest, most reliable evidence source for promotion: if the same decision, convention, or gotcha appears across multiple commit bodies, that is strong evidence for a permanent rule.
+The funnel: progress.md → MEMORY.md → CLAUDE.md. Each level is less contextual and more instructional.
 
-- **progress.md** — what is happening right now, high context, ephemeral
-- **MEMORY.md** — what we have learned recently, project knowledge, compacted at each commit
-- **CLAUDE.md** — permanent knowledge and instructions, biased toward directives
-
-Proactively promote stable [P1] patterns from MEMORY.md to CLAUDE.md. Prefer instructions over observations: distill knowledge into rules, constraints, and conventions where possible.
+Proactively promote stable [P1] patterns from MEMORY.md to CLAUDE.md. Prefer instructions over observations.
 
 **What qualifies:**
 - Gotchas that burned time and should never recur
@@ -87,4 +84,4 @@ Proactively promote stable [P1] patterns from MEMORY.md to CLAUDE.md. Prefer ins
 - **Project** (applies to this repo) → project root `CLAUDE.md`
 - **Subdomain** (cohesive project area) → nested `CLAUDE.md` in that directory
 
-When promoting, remove or downgrade the MEMORY.md entry. CLAUDE.md is the permanent instruction set; MEMORY.md is the working buffer.
+When promoting, remove or downgrade the MEMORY.md entry.

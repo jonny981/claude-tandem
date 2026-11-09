@@ -17,7 +17,7 @@ SCRIPT="reflect-progress.sh"
   assert_output ""
 }
 
-# ─── Guard: empty CWD ────────────────────────────────────────────────────────
+# ─── Guard: empty CWD ───────────────────────────────────────────────────────���
 
 @test "empty CWD: exits 0 with no output" {
   run_script_with_input "$SCRIPT" '{"cwd":"","stop_reason":"end_turn"}'
@@ -43,46 +43,36 @@ SCRIPT="reflect-progress.sh"
 
 # ─── Creates progress.md if missing ──────────────────────────────────────────
 
-@test "missing progress.md: creates file with template" {
+@test "missing progress.md: creates file with frontmatter" {
   rm -f "$TEST_PROGRESS_DIR/progress.md"
   run_script_with_input "$SCRIPT" "$(fixture_stop)"
   assert_success
   [ -f "$TEST_PROGRESS_DIR/progress.md" ]
-  grep -q 'working-state:start' "$TEST_PROGRESS_DIR/progress.md"
+  grep -q 'type: session-progress' "$TEST_PROGRESS_DIR/progress.md"
 }
 
-@test "missing progress.md: outputs populate prompt" {
-  rm -f "$TEST_PROGRESS_DIR/progress.md"
+# ─── Reflection prompt ──────────────────────────────────────────────────────
+
+@test "end_turn: outputs reflection prompt" {
+  create_progress "Chose OAuth2 flow because the OEM API requires it" 0
   run_script_with_input "$SCRIPT" "$(fixture_stop)"
   assert_success
   assert_output --partial '"systemMessage"'
   assert_output --partial 'Reflect'
-  assert_output --partial 'empty'
 }
 
-# ─── Template-only progress.md ───────────────────────────────────────────────
-
-@test "template-only progress.md: outputs populate prompt" {
-  cat > "$TEST_PROGRESS_DIR/progress.md" <<'EOF'
-**Current task:** [what you're actively doing]
-EOF
+@test "same reflection prompt regardless of progress content" {
+  # Empty progress
+  create_empty_progress
   run_script_with_input "$SCRIPT" "$(fixture_stop)"
   assert_success
-  assert_output --partial '"systemMessage"'
   assert_output --partial 'Reflect'
-  assert_output --partial 'empty'
-}
 
-# ─── Populated progress + end_turn ───────────────────────────────────────────
-
-@test "populated progress + end_turn: outputs reflection prompt" {
-  create_progress "## Working State
-**Current task:** implementing auth
-**Approach:** OAuth2 flow" 0
+  # Populated progress
+  create_progress "some decisions captured" 0
   run_script_with_input "$SCRIPT" "$(fixture_stop)"
   assert_success
-  assert_output --partial '"systemMessage"'
-  assert_output --partial 'Update progress.md'
+  assert_output --partial 'Reflect'
 }
 
 # ─── Output format ───────────────────────────────────────────────────────────

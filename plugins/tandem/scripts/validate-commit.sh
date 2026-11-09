@@ -6,6 +6,9 @@
 # Skip if running inside a worker's claude -p call
 [ -n "${TANDEM_WORKER:-}" ] && exit 0
 
+# Quiet mode: do not gate raw git commit; the commit-body rule still applies.
+[ -n "${TANDEM_QUIET:-}" ] || [ -f "$HOME/.tandem/quiet" ] && exit 0
+
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(dirname "$(dirname "$0")")}"
 source "$PLUGIN_ROOT/lib/tandem.sh"
 
@@ -21,8 +24,23 @@ TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name // empty')
 COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // empty')
 [ -z "$COMMAND" ] && exit 0
 
-# Only care about git commit commands
-[[ "$COMMAND" != *"git commit"* ]] && exit 0
+# Only care about a real commit command: `git commit`, `git --no-pager commit`,
+# `git -C path commit`, at the start of the command or after ; && || | ( $( or a
+# newline. Prose that merely mentions the phrase (a heredoc body, an echo) is
+# not a commit and must not be blocked.
+GIT_COMMIT_RE=$'(^|[;&|(]|\\$\\(|\n)[[:space:]]*(sudo[[:space:]]+)?git([[:space:]]+-[^[:space:]]+([[:space:]]+[^-[:space:]][^[:space:]]*)?)*[[:space:]]+commit([[:space:]]|$)'
+[[ "$COMMAND" =~ $GIT_COMMIT_RE ]] || exit 0
+
+# ─── The /tandem:commit skill's seam ───────────────────────────────────
+# The skill cannot set TANDEM_WORKER (that env belongs to the hook's own
+# process), so it declares intent by touching a one-shot sentinel right
+# before running git commit. A fresh sentinel authorizes the commit;
+# post-commit.sh consumes it. Staleness bounds a leaked sentinel.
+SENTINEL="$HOME/.tandem/commit-intent"
+if [ -f "$SENTINEL" ] && [ -n "$(find "$SENTINEL" -mmin -15 2>/dev/null)" ]; then
+  tandem_log info "allowed: commit-intent sentinel present"
+  exit 0
+fi
 
 # ─── Enforce /tandem:commit usage ──────────────────────────────────────
 # Block raw git commit and redirect to the Tandem commit skill.

@@ -30,17 +30,18 @@ if [ -n "$TASK_SUBJECT" ]; then
   jq -n --arg s "$TASK_SUBJECT" --argjson t "$NOW" '{subject: $s, ts: $t}' >> "$TASKS_FILE" 2>/dev/null
 fi
 
-# Case 1: progress.md missing or template-only — strong nudge
+# Case 1: progress.md missing — create it
 if [ ! -f "$PROGRESS_DIR/progress.md" ]; then
-  tandem_log info "progress.md missing after task completion"
-  echo '{"systemMessage": "progress.md does not exist. Before continuing, create it in your auto-memory directory with your Working State: what you are working on, your approach, blockers, and key files. The memory pipeline depends on this file."}'
-  exit 0
-fi
-
-if grep -q '\[what you'"'"'re actively doing\]' "$PROGRESS_DIR/progress.md" 2>/dev/null; then
-  tandem_log info "progress.md template-only after task completion"
-  echo '{"systemMessage": "progress.md is still a blank template. Fill in your Working State now with what you are working on, your approach, and key files."}'
-  exit 0
+  mkdir -p "$PROGRESS_DIR"
+  cat > "$PROGRESS_DIR/progress.md" <<'TEMPLATE'
+---
+framework: default
+type: session-progress
+depends_on: []
+feeds: [MEMORY.md]
+---
+TEMPLATE
+  tandem_log info "progress.md created at $PROGRESS_DIR (task-completed)"
 fi
 
 # Case 2: Gather tasks completed since last progress.md write
@@ -65,7 +66,7 @@ if [ -z "$RECENT_TASKS" ]; then
   if [ -n "$TASK_SUBJECT" ]; then
     SUBJECT_MSG="Task '${TASK_SUBJECT}' was just completed. "
   fi
-  echo "{\"systemMessage\": \"${SUBJECT_MSG}progress.md hasn't been updated in $((AGE / 60)) minutes. Evaluate: has your Working State changed (new task, different approach, decisions made, blockers resolved, key files changed)? If yes, update progress.md now.\"}"
+  echo "{\"systemMessage\": \"${SUBJECT_MSG}Reflect: any decisions, corrections, or constraints worth capturing in progress.md since your last entry?\"}"
   exit 0
 fi
 
@@ -74,7 +75,7 @@ TASK_LIST=$(echo "$RECENT_TASKS" | sed 's/^/- /' | tr '\n' ' ' | sed 's/ *$//')
 
 tandem_log debug "reflection trigger: $(echo "$RECENT_TASKS" | wc -l | tr -d ' ') tasks since last write"
 
-MSG="Tasks completed since your last progress.md update: ${TASK_LIST}. Evaluate: do these represent a significant change in your Working State (new task, changed approach, decisions made, blockers resolved, key files changed)? If yes, update progress.md now. If not, carry on."
+MSG="Tasks completed since your last progress.md entry: ${TASK_LIST}. Reflect: any decisions, constraints, or reasoning worth capturing?"
 jq -n --arg msg "$MSG" '{"systemMessage": $msg}'
 
 exit 0

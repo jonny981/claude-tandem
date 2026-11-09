@@ -32,7 +32,7 @@ Where does this sit in the larger effort? What came before, what comes next? If 
 
 Write for machine comprehension. Be explicit about intent, reasoning, and epistemic state. Capture the developer's thinking at the moment of implementation. Do not summarise the diff, the diff describes itself. Describe what the diff cannot: the why, the what-else, the what-next.
 
-The session log in progress.md is the primary source for this content. Mine it for reasoning chains, corrections, and decision rationale. The commit body is where that reasoning becomes permanent.
+progress.md is the primary source for this content. Mine it for reasoning chains, corrections, and decision rationale. The commit body is where that reasoning becomes permanent.
 
 This is the epistemic record. When someone asks "why is this code the way it is?" six months from now, the commit body answers with the full thought process, including the iterations, corrections, and constraints that shaped the final design. Write it so an LLM can reconstruct the full context of this session from the commit message alone.
 

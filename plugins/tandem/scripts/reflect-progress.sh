@@ -38,28 +38,12 @@ type: session-progress
 depends_on: []
 feeds: [MEMORY.md]
 ---
-
-<!-- working-state:start -->
-## Working State
-**Current task:** [what you're actively doing]
-**Approach:** [chosen approach and why]
-**Blockers:** [unresolved issues, if any]
-**Key files:** [files being modified]
-<!-- working-state:end -->
 TEMPLATE
   tandem_log info "progress.md created at $PROGRESS_DIR"
 fi
 
-# If progress.md is template-only, prompt to populate it
-if grep -q '\[what you'"'"'re actively doing\]' "$PROGRESS_DIR/progress.md" 2>/dev/null; then
-  jq -n '{
-    "systemMessage": "Reflect: progress.md exists but is empty. If the work you just completed was substantive, write your Working State now (current task, approach, key files) and a brief session log entry."
-  }'
-  exit 0
-fi
-
 jq -n '{
-  "systemMessage": "Update progress.md if the work just completed was substantive: new direction, key decision, or completed chunk. Skip if trivial continuation."
+  "systemMessage": "Reflect: did you just make a decision, change approach, hit a constraint, or finish a meaningful chunk? If so, append the reasoning to progress.md. If the work was trivial or you are still accumulating context, skip."
 }'
 
 exit 0

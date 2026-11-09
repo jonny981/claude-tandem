@@ -31,21 +31,6 @@
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/scripts/post-commit.sh",
             "timeout": 5
-          },
-          {
-            "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/post-push.sh",
-            "timeout": 5
-          }
-        ]
-      },
-      {
-        "matcher": "ExitPlanMode",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "echo '{\"systemMessage\":\"Plan mode exited. Update progress.md Working State with the planning outcome: decisions made, approach chosen, what comes next. Planning is progress.\"}'",
-            "timeout": 5
           }
         ]
       }

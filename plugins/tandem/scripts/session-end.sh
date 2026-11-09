@@ -113,7 +113,10 @@ PROJECT_NAME=$(basename "$CWD")
 GLOBAL_DIR="$HOME/.tandem/memory"
 GLOBAL_FILE="$GLOBAL_DIR/global.md"
 
-SUMMARY=$(grep -v '^\s*$' "$PROGRESS_DIR/progress.md" | grep -v '^#' | head -3 | tr '\n' ' ' | sed 's/  */ /g' | cut -c1-120)
+# Skip the YAML frontmatter (between the first two --- lines) and the Working
+# State template fields, so the summary is real session-log content.
+SUMMARY=$(awk 'BEGIN{fm=0} /^---[[:space:]]*$/ && fm<2 {fm++; next} fm==0 || fm>=2' "$PROGRESS_DIR/progress.md" \
+  | grep -v '^\s*$' | grep -v '^#' | grep -v '^\*\*' | grep -v '^<!--' | head -3 | tr '\n' ' ' | sed 's/  */ /g' | cut -c1-120)
 
 if [ -n "$SUMMARY" ]; then
   ENTRY="## ${TODAY} — ${PROJECT_NAME}

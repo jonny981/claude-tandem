@@ -1,5 +1,5 @@
 #!/usr/bin/env bats
-# Tests for guard-progress.sh (PreToolUse blocker for template-only progress.md).
+# Tests for guard-progress.sh (PreToolUse blocker for empty/stale progress.md).
 
 load '../helpers/test_helper'
 load '../helpers/mock_claude'
@@ -26,11 +26,16 @@ SCRIPT="guard-progress.sh"
 
 # ─── Allow: writing TO progress.md ───────────────────────────────────────────
 
-@test "writing to progress.md: always allowed even when template-only" {
-  cat > "$TEST_PROGRESS_DIR/progress.md" <<'EOF'
-**Current task:** [what you're actively doing]
-EOF
+@test "writing to progress.md: always allowed even when empty" {
+  create_empty_progress
   run_script_with_input "$SCRIPT" "$(fixture_pretooluse_write "$TEST_PROGRESS_DIR/progress.md")"
+  assert_success
+  assert_output ""
+}
+
+@test "writing to MEMORY.md: always allowed" {
+  rm -f "$TEST_PROGRESS_DIR/progress.md"
+  run_script_with_input "$SCRIPT" "$(fixture_pretooluse_write "$TEST_MEMORY_DIR/MEMORY.md")"
   assert_success
   assert_output ""
 }
@@ -53,40 +58,27 @@ EOF
   assert_output --partial '"block"'
 }
 
-# ─── Block: template-only progress.md ────────────────────────────────────────
+# ─── Block: empty progress.md (frontmatter only) ────────────────────────────
 
-@test "template-only progress.md: blocks Write with reason" {
-  cat > "$TEST_PROGRESS_DIR/progress.md" <<'EOF'
----
-framework: default
----
-<!-- working-state:start -->
-## Working State
-**Current task:** [what you're actively doing]
-**Approach:** [chosen approach and why]
-<!-- working-state:end -->
-EOF
+@test "empty progress.md (frontmatter only): blocks Write" {
+  create_empty_progress
   run_script_with_input "$SCRIPT" "$(fixture_pretooluse_write "/tmp/some/code.py")"
   assert_failure
   assert_output --partial '"block"'
-  assert_output --partial 'blank template'
+  assert_output --partial 'empty'
 }
 
 # ─── Allow: populated progress.md ────────────────────────────────────────────
 
 @test "populated progress.md: allows Write" {
-  create_progress "## Working State
-**Current task:** implementing auth
-**Approach:** OAuth2 flow" 0
+  create_progress "Investigating auth flow options, chose OAuth2 because of X" 0
   run_script_with_input "$SCRIPT" "$(fixture_pretooluse_write "/tmp/some/code.py")"
   assert_success
   assert_output ""
 }
 
 @test "populated progress.md: allows Edit" {
-  create_progress "## Working State
-**Current task:** implementing auth
-**Approach:** OAuth2 flow" 0
+  create_progress "Investigating auth flow options" 0
   run_script_with_input "$SCRIPT" "$(fixture_pretooluse_edit "/tmp/some/code.py")"
   assert_success
   assert_output ""

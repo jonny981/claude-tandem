@@ -180,7 +180,7 @@ CLAUDE_MD="$HOME/.claude/CLAUDE.md"
 TANDEM_VERSION="v${PLUGIN_VERSION:-1.2.0}"
 TANDEM_SECTION="<!-- tandem:start ${TANDEM_VERSION} -->
 ## Tandem — Session Progress
-Read .claude/progress.md (at the repo root) for current session state. Maintain it with two parts: a rewritable Working State section (between \`<!-- working-state:start/end -->\` markers) capturing current task, approach, blockers, and key files, plus an append-only Session Log below. Create it on your first significant action if it doesn't exist. Update Working State on plan mode transitions, not just code changes. Planning and decision-making are progress. This enables memory continuity between sessions.
+Maintain .claude/progress.md (at the repo root) as an append-only session log. Capture the thinking, reasoning, deliberations, explorations, constraints, and corrections that committed artifacts cannot preserve. At commit time, condense the log into the commit body, compact into MEMORY.md, and reset.
 <!-- tandem:end -->"
 
 if [ ! -f "$CLAUDE_MD" ]; then
@@ -236,19 +236,9 @@ fi
 # --- Post-compaction state recovery (outputs directly, before Tandem block) ---
 
 if [ -f "$PROGRESS_DIR/progress.md" ] && grep -q '## Pre-compaction State' "$PROGRESS_DIR/progress.md"; then
-  # Prefer structured Working State over free-form Pre-compaction State
-  STATE_CONTENT=""
-  if grep -q '<!-- working-state:start -->' "$PROGRESS_DIR/progress.md" 2>/dev/null; then
-    STATE_CONTENT=$(sed -n '/<!-- working-state:start -->/,/<!-- working-state:end -->/p' \
-      "$PROGRESS_DIR/progress.md" | grep -v '<!-- working-state')
-  fi
-
-  # Fall back to Pre-compaction State if no structured state
+  STATE_CONTENT=$(sed -n '/^## Pre-compaction State$/,/^## /{ /^## Pre-compaction State$/d; /^## /d; p; }' "$PROGRESS_DIR/progress.md")
   if [ -z "$STATE_CONTENT" ]; then
-    STATE_CONTENT=$(sed -n '/^## Pre-compaction State$/,/^## /{ /^## Pre-compaction State$/d; /^## /d; p; }' "$PROGRESS_DIR/progress.md")
-    if [ -z "$STATE_CONTENT" ]; then
-      STATE_CONTENT=$(sed -n '/^## Pre-compaction State$/,$p' "$PROGRESS_DIR/progress.md" | tail -n +2)
-    fi
+    STATE_CONTENT=$(sed -n '/^## Pre-compaction State$/,$p' "$PROGRESS_DIR/progress.md" | tail -n +2)
   fi
 
   if [ -n "$STATE_CONTENT" ]; then
@@ -256,9 +246,10 @@ if [ -f "$PROGRESS_DIR/progress.md" ] && grep -q '## Pre-compaction State' "$PRO
     echo "$STATE_CONTENT"
   fi
 
+  # Strip auto-captured sections, keep the session log
   TMPFILE=$(mktemp)
   if [ -n "$TMPFILE" ] && [ -f "$TMPFILE" ]; then
-    sed '/^## Auto-captured (pre-compaction)$/,$d; /^## Pre-compaction State$/,$d' "$PROGRESS_DIR/progress.md" > "$TMPFILE"
+    sed '/^## Auto-captured (pre-compaction)$/,$d; /^## Pre-compaction State$/,$d; /^## Pre-compaction marker$/,$d' "$PROGRESS_DIR/progress.md" > "$TMPFILE"
     if [ $? -eq 0 ]; then
       sed -i.bak -e :a -e '/^\n*$/{$d;N;ba;}' "$TMPFILE" 2>/dev/null || sed -e :a -e '/^\n*$/{$d;N;ba;}' "$TMPFILE" > "${TMPFILE}.clean" && mv "${TMPFILE}.clean" "$TMPFILE"
       rm -f "${TMPFILE}.bak"
@@ -270,13 +261,17 @@ if [ -f "$PROGRESS_DIR/progress.md" ] && grep -q '## Pre-compaction State' "$PRO
   else
     tandem_log warn "failed to create temp file for progress.md state cleanup"
   fi
-elif [ -f "$PROGRESS_DIR/progress.md" ] && grep -q '<!-- working-state:start -->' "$PROGRESS_DIR/progress.md" 2>/dev/null; then
-  # Previous session ended without compaction — Working State markers still present
-  STATE_CONTENT=$(sed -n '/<!-- working-state:start -->/,/<!-- working-state:end -->/p' \
-    "$PROGRESS_DIR/progress.md" | grep -v '<!-- working-state')
-  if [ -n "$STATE_CONTENT" ]; then
-    echo "Continuing from previous session:"
-    echo "$STATE_CONTENT"
+elif [ -f "$PROGRESS_DIR/progress.md" ]; then
+  # Previous session had content — show summary
+  CONTENT_LINES=$(awk '
+    BEGIN { in_fm=0; past_fm=0 }
+    /^---$/ { if (!in_fm) { in_fm=1; next } else { past_fm=1; next } }
+    past_fm && /[^ \t]/ { count++ }
+    END { print count+0 }
+  ' "$PROGRESS_DIR/progress.md")
+
+  if [ "$CONTENT_LINES" -gt 0 ]; then
+    echo "Continuing from previous session. progress.md has ${CONTENT_LINES} lines of session log."
   fi
 fi
 

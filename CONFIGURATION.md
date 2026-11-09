@@ -10,7 +10,7 @@ Tandem uses environment variables to control behavior across its features (Recal
 | `TANDEM_LLM_MODEL` | `haiku` | Model name. Required for URL backends. | `llama3.2`, `mistral` |
 | `TANDEM_LLM_API_KEY` | (none) | Bearer token for remote endpoints | `sk-...` |
 | `TANDEM_LOG_LEVEL` | `info` | Log verbosity: `error`, `warn`, `info`, `debug` | `debug` (verbose for troubleshooting) |
-| `TANDEM_QUIET` | `0` | Suppress all Tandem status output | `1` (dogfooding mode) |
+| `TANDEM_QUIET` | `0` | Suppress the per-prompt status line, the post-commit compaction message, and the raw-commit gate. Progress reflection, session start and end, and pre-compact still run. A file at `~/.tandem/quiet` does the same and takes effect at once, where the variable needs a session restart. | `1` (when the status line already shows progress and memory ages) |
 | `TANDEM_AUTO_COMMIT` | `1` | Enable/disable session-end auto-commits | `0` (disable) |
 
 ### Setting Environment Variables
@@ -69,7 +69,7 @@ Tandem hooks receive JSON input via stdin. Each hook reads specific fields:
 - Phase 1: Calls Haiku to compact MEMORY.md (budget: $0.05)
 - Phase 2: Updates global activity log (`~/.tandem/memory/global.md`)
 - Deregisters the session from `~/.tandem/sessions/`
-- progress.md is preserved (Working State carries forward to the next session)
+- progress.md is preserved (session log carries forward to the next session)
 - Only fires if `progress.md` exists (trivial sessions skip LLM calls)
 
 ### PreCompact Hook (`pre-compact.sh`)

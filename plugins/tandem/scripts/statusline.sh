@@ -152,12 +152,21 @@ if [ "$sibling_count" -gt 0 ]; then
 fi
 
 # Progress health
-if [ -n "$progress_dir" ] && [ -f "$progress_dir/progress.md" ] && grep -q '<!-- working-state:start -->' "$progress_dir/progress.md" 2>/dev/null; then
+if [ -n "$progress_dir" ] && [ -f "$progress_dir/progress.md" ]; then
   prog_mtime=$(stat -f '%m' "$progress_dir/progress.md" 2>/dev/null || stat -c '%Y' "$progress_dir/progress.md" 2>/dev/null)
   prog_age=$(_relative_age "$prog_mtime")
-  # Count session log entries (lines starting with - after working-state block)
-  prog_logs=$(sed -n '/<!-- working-state:end -->/,$ { /^- /p; }' "$progress_dir/progress.md" 2>/dev/null | wc -l | tr -d ' ')
-  out="${out}  prog: ${GREEN}✓ ${prog_age} ${prog_logs}log${RESET}"
+  # Count content lines after frontmatter
+  prog_lines=$(awk '
+    BEGIN { in_fm=0; past_fm=0 }
+    /^---$/ { if (!in_fm) { in_fm=1; next } else { past_fm=1; next } }
+    past_fm && /[^ \t]/ { count++ }
+    END { print count+0 }
+  ' "$progress_dir/progress.md")
+  if [ "$prog_lines" -gt 0 ]; then
+    out="${out}  prog: ${GREEN}✓ ${prog_age} ${prog_lines}L${RESET}"
+  else
+    out="${out}  prog: ${RED}empty${RESET}"
+  fi
 else
   out="${out}  prog: ${RED}✗${RESET}"
 fi

@@ -83,14 +83,14 @@ Each feature is independently valuable. Together, structured memory carries cont
 
 Claude Code has auto-memory and context compaction. Recall adds structure on top: priority tiers, session bridging, proactive progress tracking, cross-project awareness, and safe compaction.
 
-- **Session bridge via progress.md** maintains a two-part `progress.md` at `<git-root>/.claude/progress.md` (repo-scoped, gitignored): a rewritable Working State snapshot (current task, approach, blockers, key files) and an append-only Session Log below. Survives context compaction. Persists across sessions, with Working State carrying forward until fresh work begins.
-- **Reflective progress capture** prompts Claude to evaluate whether progress.md needs updating after each response (Stop hook). Writing progress is a reflective action, not a prerequisite. If the work was trivial or a continuation with no new context, no update is needed.
-- **Post-commit compaction** triggers inline memory compaction after every git commit. Claude merges progress.md into MEMORY.md, mines git log for recurring patterns, and promotes stable patterns to CLAUDE.md. Runs with full session context for higher quality than background LLM calls.
+- **Session log via progress.md** maintains an append-only `progress.md` at `<git-root>/.claude/progress.md` (repo-scoped, gitignored). Captures reasoning, deliberations, explorations, constraints, and corrections that committed artifacts cannot preserve. Survives context compaction. Persists across sessions.
+- **Significance-based capture** nudges Claude to write after each response via the Stop hook, but only when something worth preserving has happened: a decision, a correction, a constraint, a completed chunk. Trivial work and context-gathering don't warrant entries. The commit skill is the hard gate: you cannot commit without progress content.
+- **Post-commit compaction** triggers inline memory compaction after every git commit. Claude condenses progress.md into the commit body, merges learnings into MEMORY.md, mines git log for recurring patterns, and promotes stable patterns to CLAUDE.md. Then resets progress.md.
 - **Priority-based memory** uses three tiers: [P1] permanent (architecture, preferences), [P2] active (current state, recent decisions), [P3] ephemeral (debugging details). Each entry carries temporal metadata (`observed: YYYY-MM-DD`) for evidence-based pruning.
-- **Plan mode awareness** fires a reminder when Claude exits plan mode, prompting a progress.md update. Planning, research, and decision-making are progress worth capturing, not just code changes.
+- **Plan mode awareness** fires a reminder when Claude exits plan mode, prompting a progress.md update. Planning, research, and decision-making are progress worth capturing.
 - **Session registry** tracks each session at `~/.tandem/sessions/<session-id>/` with pid, project, branch, heartbeat, and current task. Orphaned sessions (dead pid) are cleaned up automatically. Run `/tandem:sessions` to inspect.
 - **Sibling awareness** discovers other active sessions on the same project at startup.
-- **Pre-compaction safety net** captures the precise "where are we right now" before compaction via a PreCompact hook. When structured Working State markers exist, this is deterministic (no LLM needed).
+- **Pre-compaction safety net** captures session state before compaction via a PreCompact hook. Uses an LLM call to extract state from the transcript when progress.md is stale.
 - **Cross-project context** logs a summary to a global rolling log (`~/.tandem/memory/global.md`, 30 entries max) at session end. At session start, Claude sees recent activity from other projects.
 - **Pattern promotion** surfaces recurring themes and promotes them as candidates for CLAUDE.md. Run `/tandem:recall-promote` to manually promote high-recurrence themes.
 - **Task reflection** triggers async evaluation when tasks complete, asking Claude to assess whether progress.md needs updating based on accumulated completed tasks.
@@ -175,7 +175,6 @@ Every feature is a lifecycle hook that runs, does its work, and exits. Compactio
 | UserPromptSubmit | `check-progress.sh` | Status line with project name, memory/progress ages, modified file count |
 | PreToolUse (Bash) | `validate-commit.sh` | Conventional commit format + body enforcement |
 | PostToolUse (Bash) | `post-commit.sh` | Detect successful commits, trigger inline compaction pipeline |
-| PostToolUse (Bash) | `post-push.sh` | Detect push/PR creation, prompt PR summary from commit bodies |
 | PostToolUse (ExitPlanMode) | *(inline)* | Remind Claude to update progress.md after plan mode |
 | Stop | `reflect-progress.sh` | Reflective progress capture: creates progress.md if missing, prompts evaluation after each response |
 | SessionStart | `session-start.sh` | Provisioning, migration, gitignore, session registration, orphan cleanup, sibling detection, post-compaction state recovery, cross-project context |
@@ -187,7 +186,7 @@ Dependencies: `bash 3.2+` and `jq`. No `npm install`, no `pip install`, no compi
 
 ### LLM backend
 
-Background LLM calls are minimal. The only hook that calls an LLM is PreCompact (when structured Working State markers are absent and progress is stale). The primary compaction pipeline runs inline, using Claude's own session context rather than a separate LLM call.
+Background LLM calls are minimal. The only hook that calls an LLM is PreCompact (when progress.md is stale). The primary compaction pipeline runs inline, using Claude's own session context rather than a separate LLM call.
 
 You can point Tandem's background calls at any OpenAI-compatible endpoint, useful for local models:
 
@@ -201,7 +200,7 @@ A 7-8B parameter local model works well for the lightweight admin tasks. See [CO
 
 ### Cost
 
-Most work is done inline by Claude (the compaction pipeline triggered by post-commit), which costs nothing beyond the existing session. The only background LLM call is PreCompact, and only when structured Working State markers are absent.
+Most work is done inline by Claude (the compaction pipeline triggered by post-commit), which costs nothing beyond the existing session. The only background LLM call is PreCompact, and only when progress.md is stale.
 
 Typical session cost from Tandem hooks: **< $0.01**. With a local LLM backend: **$0**.
 
